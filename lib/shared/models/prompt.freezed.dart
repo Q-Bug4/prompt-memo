@@ -27,7 +27,6 @@ mixin _$Prompt {
   DateTime get createdAt => throw _privateConstructorUsedError;
   DateTime get updatedAt => throw _privateConstructorUsedError;
   String? get collectionId => throw _privateConstructorUsedError;
-  int get usageCount => throw _privateConstructorUsedError;
   List<String> get tags => throw _privateConstructorUsedError;
 
   /// Serializes this Prompt to a JSON map.
@@ -51,7 +50,6 @@ abstract class $PromptCopyWith<$Res> {
     DateTime createdAt,
     DateTime updatedAt,
     String? collectionId,
-    int usageCount,
     List<String> tags,
   });
 }
@@ -77,7 +75,6 @@ class _$PromptCopyWithImpl<$Res, $Val extends Prompt>
     Object? createdAt = null,
     Object? updatedAt = null,
     Object? collectionId = freezed,
-    Object? usageCount = null,
     Object? tags = null,
   }) {
     return _then(
@@ -112,11 +109,6 @@ class _$PromptCopyWithImpl<$Res, $Val extends Prompt>
                     ? _value.collectionId
                     : collectionId // ignore: cast_nullable_to_non_nullable
                         as String?,
-            usageCount:
-                null == usageCount
-                    ? _value.usageCount
-                    : usageCount // ignore: cast_nullable_to_non_nullable
-                        as int,
             tags:
                 null == tags
                     ? _value.tags
@@ -143,7 +135,6 @@ abstract class _$$PromptImplCopyWith<$Res> implements $PromptCopyWith<$Res> {
     DateTime createdAt,
     DateTime updatedAt,
     String? collectionId,
-    int usageCount,
     List<String> tags,
   });
 }
@@ -168,7 +159,6 @@ class __$$PromptImplCopyWithImpl<$Res>
     Object? createdAt = null,
     Object? updatedAt = null,
     Object? collectionId = freezed,
-    Object? usageCount = null,
     Object? tags = null,
   }) {
     return _then(
@@ -203,11 +193,6 @@ class __$$PromptImplCopyWithImpl<$Res>
                 ? _value.collectionId
                 : collectionId // ignore: cast_nullable_to_non_nullable
                     as String?,
-        usageCount:
-            null == usageCount
-                ? _value.usageCount
-                : usageCount // ignore: cast_nullable_to_non_nullable
-                    as int,
         tags:
             null == tags
                 ? _value._tags
@@ -228,7 +213,6 @@ class _$PromptImpl implements _Prompt {
     required this.createdAt,
     required this.updatedAt,
     this.collectionId,
-    this.usageCount = 0,
     final List<String> tags = const [],
   }) : _tags = tags;
 
@@ -247,9 +231,6 @@ class _$PromptImpl implements _Prompt {
   final DateTime updatedAt;
   @override
   final String? collectionId;
-  @override
-  @JsonKey()
-  final int usageCount;
   final List<String> _tags;
   @override
   @JsonKey()
@@ -261,7 +242,7 @@ class _$PromptImpl implements _Prompt {
 
   @override
   String toString() {
-    return 'Prompt(id: $id, title: $title, content: $content, createdAt: $createdAt, updatedAt: $updatedAt, collectionId: $collectionId, usageCount: $usageCount, tags: $tags)';
+    return 'Prompt(id: $id, title: $title, content: $content, createdAt: $createdAt, updatedAt: $updatedAt, collectionId: $collectionId, tags: $tags)';
   }
 
   @override
@@ -278,8 +259,6 @@ class _$PromptImpl implements _Prompt {
                 other.updatedAt == updatedAt) &&
             (identical(other.collectionId, collectionId) ||
                 other.collectionId == collectionId) &&
-            (identical(other.usageCount, usageCount) ||
-                other.usageCount == usageCount) &&
             const DeepCollectionEquality().equals(other._tags, _tags));
   }
 
@@ -293,7 +272,6 @@ class _$PromptImpl implements _Prompt {
     createdAt,
     updatedAt,
     collectionId,
-    usageCount,
     const DeepCollectionEquality().hash(_tags),
   );
 
@@ -319,7 +297,6 @@ abstract class _Prompt implements Prompt {
     required final DateTime createdAt,
     required final DateTime updatedAt,
     final String? collectionId,
-    final int usageCount,
     final List<String> tags,
   }) = _$PromptImpl;
 
@@ -337,8 +314,6 @@ abstract class _Prompt implements Prompt {
   DateTime get updatedAt;
   @override
   String? get collectionId;
-  @override
-  int get usageCount;
   @override
   List<String> get tags;
 

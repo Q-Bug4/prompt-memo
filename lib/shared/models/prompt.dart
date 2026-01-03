@@ -12,7 +12,6 @@ class Prompt with _$Prompt {
     required DateTime createdAt,
     required DateTime updatedAt,
     String? collectionId,
-    @Default(0) int usageCount,
     @Default([]) List<String> tags,
   }) = _Prompt;
 

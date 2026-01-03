@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:uuid/uuid.dart';
 import 'package:prompt_memo/core/database/database_helper.dart';
 import 'package:prompt_memo/core/storage/filesystem_storage.dart';
@@ -26,7 +27,7 @@ class PromptRepository {
         DatabaseHelper.colTitle: title,
         DatabaseHelper.colContent: content,
         DatabaseHelper.colCollectionId: collectionId,
-        DatabaseHelper.colUsageCount: 0,
+        DatabaseHelper.colTags: tags.isEmpty ? null : jsonEncode(tags),
         DatabaseHelper.colCreatedAt: now.millisecondsSinceEpoch,
         DatabaseHelper.colUpdatedAt: now.millisecondsSinceEpoch,
       },
@@ -37,7 +38,6 @@ class PromptRepository {
       title: title,
       content: content,
       collectionId: collectionId,
-      usageCount: 0,
       tags: tags,
       createdAt: now,
       updatedAt: now,
@@ -90,6 +90,7 @@ class PromptRepository {
         DatabaseHelper.colTitle: prompt.title,
         DatabaseHelper.colContent: prompt.content,
         DatabaseHelper.colCollectionId: prompt.collectionId,
+        DatabaseHelper.colTags: prompt.tags.isEmpty ? null : jsonEncode(prompt.tags),
         DatabaseHelper.colUpdatedAt: now.millisecondsSinceEpoch,
       },
       where: '${DatabaseHelper.colId} = ?',
@@ -111,17 +112,6 @@ class PromptRepository {
       DatabaseHelper.tablePrompts,
       where: '${DatabaseHelper.colId} = ?',
       whereArgs: [id],
-    );
-  }
-
-  /// Increments usage count for a prompt
-  Future<void> incrementUsageCount(String id) async {
-    final db = await _dbHelper.database;
-    await db.rawUpdate(
-      'UPDATE ${DatabaseHelper.tablePrompts} '
-      'SET ${DatabaseHelper.colUsageCount} = ${DatabaseHelper.colUsageCount} + 1 '
-      'WHERE ${DatabaseHelper.colId} = ?',
-      [id],
     );
   }
 
@@ -234,13 +224,22 @@ class PromptRepository {
 
   /// Maps database row to Prompt object
   Prompt _mapToPrompt(Map<String, dynamic> map) {
+    List<String> tags = [];
+    final tagsJson = map[DatabaseHelper.colTags];
+    if (tagsJson != null && tagsJson is String && tagsJson.isNotEmpty) {
+      try {
+        tags = (jsonDecode(tagsJson) as List).map((e) => e.toString()).toList();
+      } catch (e) {
+        tags = [];
+      }
+    }
+
     return Prompt(
       id: map[DatabaseHelper.colId] as String,
       title: map[DatabaseHelper.colTitle] as String,
       content: map[DatabaseHelper.colContent] as String,
       collectionId: map[DatabaseHelper.colCollectionId] as String?,
-      usageCount: map[DatabaseHelper.colUsageCount] as int,
-      tags: const [],
+      tags: tags,
       createdAt: DateTime.fromMillisecondsSinceEpoch(map[DatabaseHelper.colCreatedAt] as int),
       updatedAt: DateTime.fromMillisecondsSinceEpoch(map[DatabaseHelper.colUpdatedAt] as int),
     );

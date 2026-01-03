@@ -53,18 +53,6 @@ class PromptListNotifier extends StateNotifier<List<Prompt>> {
     state = state.where((p) => p.id != id).toList();
   }
 
-  Future<void> incrementUsage(String id) async {
-    await _repository.incrementUsageCount(id);
-    final index = state.indexWhere((p) => p.id == id);
-    if (index != -1) {
-      final updated = List<Prompt>.from(state);
-      updated[index] = updated[index].copyWith(
-        usageCount: updated[index].usageCount + 1,
-      );
-      state = updated;
-    }
-  }
-
   Future<ResultSample?> addResultSample(String promptId, String filePath, String fileName, int fileSize, String fileType) async {
     final result = await _repository.createResultSampleSimple(
       promptId: promptId,

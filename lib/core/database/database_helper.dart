@@ -13,7 +13,7 @@ class DatabaseHelper {
   Database? _database;
 
   static const String _databaseName = 'prompt_memo.db';
-  static const int _databaseVersion = 1;
+  static const int _databaseVersion = 2;
 
   // Table names
   static const String tablePrompts = 'prompts';
@@ -30,7 +30,7 @@ class DatabaseHelper {
   static const String colTitle = 'title';
   static const String colContent = 'content';
   static const String colCollectionId = 'collection_id';
-  static const String colUsageCount = 'usage_count';
+  static const String colTags = 'tags';
 
   // Result samples table columns
   static const String colPromptId = 'prompt_id';
@@ -88,7 +88,7 @@ class DatabaseHelper {
         $colTitle TEXT NOT NULL,
         $colContent TEXT NOT NULL,
         $colCollectionId TEXT,
-        $colUsageCount INTEGER DEFAULT 0,
+        $colTags TEXT,
         $colCreatedAt INTEGER NOT NULL,
         $colUpdatedAt INTEGER NOT NULL,
         FOREIGN KEY ($colCollectionId) REFERENCES $tableCollections($colId) ON DELETE SET NULL
@@ -176,9 +176,10 @@ class DatabaseHelper {
 
   Future<void> _onUpgrade(
       Database db, int oldVersion, int newVersion) async {
-    // Handle database migrations here when version changes
-    if (oldVersion < newVersion) {
-      // Migration logic will be added here
+    // Migration from version 1 to 2
+    if (oldVersion < 2) {
+      // Add tags column
+      await db.execute('ALTER TABLE $tablePrompts ADD COLUMN $colTags TEXT');
     }
   }
 

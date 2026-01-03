@@ -208,12 +208,15 @@ class _CreatePromptScreenState extends ConsumerState<CreatePromptScreen> {
             title: _titleController.text.trim(),
             content: _contentController.text.trim(),
             collectionId: _collectionId,
-            usageCount: _editingPrompt?.usageCount ?? 0,
             tags: List.from(_tags),
             createdAt: _editingPrompt?.createdAt ?? DateTime.now(),
             updatedAt: DateTime.now(),
           ),
         );
+        // Invalidate the prompt provider so detail screen refreshes
+        ref.invalidate(promptProvider(widget.promptId!));
+        // Also invalidate the prompts list to refresh list view
+        ref.invalidate(promptsProvider);
         if (mounted) {
           context.pop();
         }

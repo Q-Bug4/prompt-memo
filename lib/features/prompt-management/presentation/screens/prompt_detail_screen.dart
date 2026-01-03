@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:logging/logging.dart';
 import 'package:go_router/go_router.dart';
@@ -38,7 +39,7 @@ class PromptDetailScreen extends ConsumerWidget {
             onSelected: (value) {
               _logger.fine('PopupMenuButton onSelected, value = $value');
               if (value == 'delete') {
-                _showDeleteDialog(context, promptId);
+                _showDeleteDialog(context, ref, promptId);
               }
             },
             itemBuilder: (menuCtx) => [
@@ -160,11 +161,12 @@ Widget _buildPromptHeader(Prompt prompt) {
       const SizedBox(height: 8),
       Wrap(
         spacing: 8,
+        runSpacing: 8,
         children: [
           _buildChip(Icons.calendar_today, _formatDate(prompt.createdAt)),
-          _buildChip(Icons.visibility, '${prompt.usageCount} views'),
           if (prompt.collectionId != null)
             _buildChip(Icons.folder, 'In Collection'),
+          ...prompt.tags.map((tag) => _buildChip(Icons.tag, tag)),
         ],
       ),
     ],
@@ -187,12 +189,25 @@ Widget _buildPromptContent(Prompt prompt) {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Prompt Content',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-            ),
+          Row(
+            children: [
+              const Text(
+                'Prompt Content',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const Spacer(),
+              IconButton(
+                icon: const Icon(Icons.copy, size: 18),
+                onPressed: () => _copyToClipboard(prompt.content),
+                tooltip: 'Copy',
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+              ),
+            ],
           ),
           const SizedBox(height: 12),
           SelectableText(prompt.content),
@@ -200,6 +215,10 @@ Widget _buildPromptContent(Prompt prompt) {
       ),
     ),
   );
+}
+
+Future<void> _copyToClipboard(String text) async {
+  await Clipboard.setData(ClipboardData(text: text));
 }
 
 Widget _buildResultsSection(
@@ -463,7 +482,7 @@ void _showAddResultDialog(BuildContext ctx, WidgetRef ref, String promptId) {
   );
 }
 
-void _showDeleteDialog(BuildContext ctx, String promptId) {
+void _showDeleteDialog(BuildContext ctx, WidgetRef ref, String promptId) {
   _logger.info('_showDeleteDialog called, promptId = $promptId');
   showDialog(
     context: ctx,
@@ -479,7 +498,16 @@ void _showDeleteDialog(BuildContext ctx, String promptId) {
           child: const Text('Cancel'),
         ),
         TextButton(
-          onPressed: () => Navigator.pop(dialogCtx),
+          onPressed: () async {
+            Navigator.pop(dialogCtx);
+            final repository = ref.read(promptRepositoryProvider);
+            await repository.deletePrompt(promptId);
+            // Refresh the home page's notifier to clear cache
+            ref.read(promptListNotifierProvider.notifier).loadPrompts();
+            if (ctx.mounted) {
+              ctx.pop();
+            }
+          },
           style: TextButton.styleFrom(
             foregroundColor: Colors.red,
           ),

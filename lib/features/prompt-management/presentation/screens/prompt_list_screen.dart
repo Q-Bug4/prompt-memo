@@ -27,6 +27,13 @@ class _PromptListScreenState extends ConsumerState<PromptListScreen> {
             onPressed: () => context.push('/search'),
             tooltip: 'Search',
           ),
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () {
+              ref.read(promptListNotifierProvider.notifier).loadPrompts();
+            },
+            tooltip: 'Refresh',
+          ),
           PopupMenuButton<String>(
             onSelected: (value) {
               if (value == 'collections') {
@@ -96,7 +103,6 @@ class _PromptListScreenState extends ConsumerState<PromptListScreen> {
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       child: InkWell(
         onTap: () {
-          ref.read(promptListNotifierProvider.notifier).incrementUsage(prompt.id);
           ctx.push('/prompt/${prompt.id}');
         },
         child: Padding(
@@ -115,36 +121,6 @@ class _PromptListScreenState extends ConsumerState<PromptListScreen> {
                       ),
                     ),
                   ),
-                  if (prompt.usageCount > 0)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Color.fromRGBO(33, 150, 243, 0.1),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(
-                            Icons.visibility,
-                            size: 14,
-                            color: Color(0xFF1976D2),
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            '${prompt.usageCount}',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Color(0xFF1976D2),
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
                 ],
               ),
               const SizedBox(height: 8),

@@ -13,7 +13,6 @@ _$PromptImpl _$$PromptImplFromJson(Map<String, dynamic> json) => _$PromptImpl(
   createdAt: DateTime.parse(json['createdAt'] as String),
   updatedAt: DateTime.parse(json['updatedAt'] as String),
   collectionId: json['collectionId'] as String?,
-  usageCount: (json['usageCount'] as num?)?.toInt() ?? 0,
   tags:
       (json['tags'] as List<dynamic>?)?.map((e) => e as String).toList() ??
       const [],
@@ -27,6 +26,5 @@ Map<String, dynamic> _$$PromptImplToJson(_$PromptImpl instance) =>
       'createdAt': instance.createdAt.toIso8601String(),
       'updatedAt': instance.updatedAt.toIso8601String(),
       'collectionId': instance.collectionId,
-      'usageCount': instance.usageCount,
       'tags': instance.tags,
     };

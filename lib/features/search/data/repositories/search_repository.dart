@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:prompt_memo/core/database/database_helper.dart';
 import 'package:prompt_memo/shared/models/prompt.dart';
 
@@ -54,9 +55,8 @@ class SearchRepository {
       args.add(endMs);
     }
 
-    // Order by relevance or usage
-    final orderBy =
-        mostUsedFirst ? '${DatabaseHelper.colUsageCount} DESC' : 'rank ASC';
+    // Order by relevance (most used first removed since usageCount is removed)
+    final orderBy = 'rank ASC';
     ftsQuery += ' ORDER BY $orderBy';
 
     final List<Map<String, dynamic>> maps =
@@ -155,13 +155,22 @@ class SearchRepository {
 
   /// Maps database row to Prompt object
   Prompt _mapToPrompt(Map<String, dynamic> map) {
+    List<String> tags = [];
+    final tagsJson = map[DatabaseHelper.colTags];
+    if (tagsJson != null && tagsJson is String && tagsJson.isNotEmpty) {
+      try {
+        tags = (jsonDecode(tagsJson) as List).map((e) => e.toString()).toList();
+      } catch (e) {
+        tags = [];
+      }
+    }
+
     return Prompt(
       id: map[DatabaseHelper.colId] as String,
       title: map[DatabaseHelper.colTitle] as String,
       content: map[DatabaseHelper.colContent] as String,
       collectionId: map[DatabaseHelper.colCollectionId] as String?,
-      usageCount: map[DatabaseHelper.colUsageCount] as int,
-      tags: const [],
+      tags: tags,
       createdAt: DateTime.fromMillisecondsSinceEpoch(map[DatabaseHelper.colCreatedAt] as int),
       updatedAt: DateTime.fromMillisecondsSinceEpoch(map[DatabaseHelper.colUpdatedAt] as int),
     );
