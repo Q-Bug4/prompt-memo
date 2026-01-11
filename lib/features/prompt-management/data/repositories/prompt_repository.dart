@@ -7,7 +7,11 @@ import 'package:prompt_memo/shared/models/result_sample.dart';
 
 /// Repository for managing prompts
 class PromptRepository {
-  final DatabaseHelper _dbHelper = DatabaseHelper();
+  final DatabaseHelper _dbHelper;
+
+  /// Creates a new PromptRepository
+  /// For testing, you can inject a mock DatabaseHelper
+  PromptRepository({DatabaseHelper? dbHelper}) : _dbHelper = dbHelper ?? DatabaseHelper();
 
   /// Creates a new prompt
   Future<Prompt> createPrompt({
@@ -16,13 +20,12 @@ class PromptRepository {
     String? collectionId,
     List<String> tags = const [],
   }) async {
-    final db = await _dbHelper.database;
     final id = const Uuid().v4();
     final now = DateTime.now();
 
-    await db.insert(
-      DatabaseHelper.tablePrompts,
-      {
+    await _dbHelper.insert(
+      tableName: DatabaseHelper.tablePrompts,
+      values: {
         DatabaseHelper.colId: id,
         DatabaseHelper.colTitle: title,
         DatabaseHelper.colContent: content,
@@ -46,9 +49,8 @@ class PromptRepository {
 
   /// Gets all prompts
   Future<List<Prompt>> getAllPrompts() async {
-    final db = await _dbHelper.database;
-    final List<Map<String, dynamic>> maps = await db.query(
-      DatabaseHelper.tablePrompts,
+    final List<Map<String, dynamic>> maps = await _dbHelper.query(
+      tableName: DatabaseHelper.tablePrompts,
       orderBy: '${DatabaseHelper.colUpdatedAt} DESC',
     );
     return maps.map((map) => _mapToPrompt(map)).toList();
@@ -56,9 +58,8 @@ class PromptRepository {
 
   /// Gets prompt by ID
   Future<Prompt?> getPromptById(String id) async {
-    final db = await _dbHelper.database;
-    final List<Map<String, dynamic>> maps = await db.query(
-      DatabaseHelper.tablePrompts,
+    final List<Map<String, dynamic>> maps = await _dbHelper.query(
+      tableName: DatabaseHelper.tablePrompts,
       where: '${DatabaseHelper.colId} = ?',
       whereArgs: [id],
     );
@@ -69,9 +70,8 @@ class PromptRepository {
 
   /// Gets prompts by collection ID
   Future<List<Prompt>> getPromptsByCollection(String collectionId) async {
-    final db = await _dbHelper.database;
-    final List<Map<String, dynamic>> maps = await db.query(
-      DatabaseHelper.tablePrompts,
+    final List<Map<String, dynamic>> maps = await _dbHelper.query(
+      tableName: DatabaseHelper.tablePrompts,
       where: '${DatabaseHelper.colCollectionId} = ?',
       whereArgs: [collectionId],
       orderBy: '${DatabaseHelper.colUpdatedAt} DESC',
@@ -81,12 +81,11 @@ class PromptRepository {
 
   /// Updates a prompt
   Future<void> updatePrompt(Prompt prompt) async {
-    final db = await _dbHelper.database;
     final now = DateTime.now();
 
-    await db.update(
-      DatabaseHelper.tablePrompts,
-      {
+    await _dbHelper.update(
+      tableName: DatabaseHelper.tablePrompts,
+      values: {
         DatabaseHelper.colTitle: prompt.title,
         DatabaseHelper.colContent: prompt.content,
         DatabaseHelper.colCollectionId: prompt.collectionId,
@@ -100,16 +99,14 @@ class PromptRepository {
 
   /// Deletes a prompt and all its result samples
   Future<void> deletePrompt(String id) async {
-    final db = await _dbHelper.database;
-
     // Get result samples to delete files
     final results = await getResultSamples(id);
     for (final result in results) {
       await deleteResultSample(result.id);
     }
 
-    await db.delete(
-      DatabaseHelper.tablePrompts,
+    await _dbHelper.delete(
+      tableName: DatabaseHelper.tablePrompts,
       where: '${DatabaseHelper.colId} = ?',
       whereArgs: [id],
     );
@@ -127,13 +124,12 @@ class PromptRepository {
     int? height,
     int? durationSeconds,
   }) async {
-    final db = await _dbHelper.database;
     final id = const Uuid().v4();
     final now = DateTime.now();
 
-    await db.insert(
-      DatabaseHelper.tableResultSamples,
-      {
+    await _dbHelper.insert(
+      tableName: DatabaseHelper.tableResultSamples,
+      values: {
         DatabaseHelper.colId: id,
         DatabaseHelper.colPromptId: promptId,
         DatabaseHelper.colFileType: fileType,
@@ -182,9 +178,8 @@ class PromptRepository {
 
   /// Gets all result samples for a prompt
   Future<List<ResultSample>> getResultSamples(String promptId) async {
-    final db = await _dbHelper.database;
-    final List<Map<String, dynamic>> maps = await db.query(
-      DatabaseHelper.tableResultSamples,
+    final List<Map<String, dynamic>> maps = await _dbHelper.query(
+      tableName: DatabaseHelper.tableResultSamples,
       where: '${DatabaseHelper.colPromptId} = ?',
       whereArgs: [promptId],
       orderBy: '${DatabaseHelper.colCreatedAt} DESC',
@@ -194,9 +189,8 @@ class PromptRepository {
 
   /// Gets a result sample by ID
   Future<ResultSample?> getResultSampleById(String id) async {
-    final db = await _dbHelper.database;
-    final List<Map<String, dynamic>> maps = await db.query(
-      DatabaseHelper.tableResultSamples,
+    final List<Map<String, dynamic>> maps = await _dbHelper.query(
+      tableName: DatabaseHelper.tableResultSamples,
       where: '${DatabaseHelper.colId} = ?',
       whereArgs: [id],
     );
@@ -207,7 +201,6 @@ class PromptRepository {
 
   /// Deletes a result sample
   Future<void> deleteResultSample(String id) async {
-    final db = await _dbHelper.database;
     final result = await getResultSampleById(id);
     if (result != null) {
       // Delete file from filesystem
@@ -215,8 +208,8 @@ class PromptRepository {
       await storage.deleteFile(result.filePath);
     }
 
-    await db.delete(
-      DatabaseHelper.tableResultSamples,
+    await _dbHelper.delete(
+      tableName: DatabaseHelper.tableResultSamples,
       where: '${DatabaseHelper.colId} = ?',
       whereArgs: [id],
     );

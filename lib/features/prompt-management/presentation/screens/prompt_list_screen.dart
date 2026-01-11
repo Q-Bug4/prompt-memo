@@ -4,6 +4,9 @@ import 'package:go_router/go_router.dart';
 import 'package:material_symbols_icons/material_symbols_icons.dart';
 import 'package:prompt_memo/features/prompt-management/presentation/providers/prompt_providers.dart';
 import 'package:prompt_memo/shared/models/prompt.dart';
+import 'package:logging/logging.dart';
+
+final _logger = Logger('PromptListScreen');
 
 /// Screen displaying list of all prompts
 class PromptListScreen extends ConsumerStatefulWidget {
@@ -16,7 +19,9 @@ class PromptListScreen extends ConsumerStatefulWidget {
 class _PromptListScreenState extends ConsumerState<PromptListScreen> {
   @override
   Widget build(BuildContext context) {
+    _logger.fine('PromptListScreen: build');
     final prompts = ref.watch(promptListNotifierProvider);
+    _logger.fine('PromptListScreen: ${prompts.length} prompts loaded');
 
     return Scaffold(
       appBar: AppBar(

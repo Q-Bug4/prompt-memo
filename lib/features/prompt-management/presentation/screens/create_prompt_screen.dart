@@ -3,6 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:prompt_memo/shared/models/prompt.dart';
 import 'package:prompt_memo/features/prompt-management/presentation/providers/prompt_providers.dart';
+import 'package:logging/logging.dart';
+
+final _logger = Logger('CreatePromptScreen');
 
 /// Screen for creating or editing a prompt
 class CreatePromptScreen extends ConsumerStatefulWidget {
@@ -26,7 +29,11 @@ class _CreatePromptScreenState extends ConsumerState<CreatePromptScreen> {
   @override
   void initState() {
     super.initState();
+    _logger.info('initState, promptId = ${widget.promptId}');
     if (widget.promptId != null) {
+      _logger.fine('Creating new prompt');
+    } else {
+      _logger.fine('Editing prompt: ${widget.promptId}');
       _loadPrompt();
     }
   }
@@ -39,15 +46,19 @@ class _CreatePromptScreenState extends ConsumerState<CreatePromptScreen> {
   }
 
   Future<void> _loadPrompt() async {
+    _logger.fine('_loadPrompt: loading prompt ${widget.promptId}');
     final repository = ref.read(promptRepositoryProvider);
     _editingPrompt = await repository.getPromptById(widget.promptId!);
     if (_editingPrompt != null && mounted) {
+      _logger.fine('_loadPrompt: prompt loaded: ${_editingPrompt!.title}');
       setState(() {
         _titleController.text = _editingPrompt!.title;
         _contentController.text = _editingPrompt!.content;
         _collectionId = _editingPrompt!.collectionId;
         _tags = List.from(_editingPrompt!.tags);
       });
+    } else {
+      _logger.warning('_loadPrompt: prompt not found for id ${widget.promptId}');
     }
   }
 
@@ -146,6 +157,7 @@ class _CreatePromptScreenState extends ConsumerState<CreatePromptScreen> {
   }
 
   void _showAddTagDialog() {
+    _logger.fine('_showAddTagDialog called, current tags: $_tags');
     final controller = TextEditingController();
     showDialog(
       context: context,
@@ -165,12 +177,19 @@ class _CreatePromptScreenState extends ConsumerState<CreatePromptScreen> {
           ),
           ElevatedButton(
             onPressed: () {
-              if (controller.text.trim().isNotEmpty) {
+              final tag = controller.text.trim();
+              if (tag.isNotEmpty) {
+                _logger.fine('_showAddTagDialog: adding tag: $tag');
                 setState(() {
-                  if (!_tags.contains(controller.text.trim())) {
-                    _tags.add(controller.text.trim());
+                  if (!_tags.contains(tag)) {
+                    _tags.add(tag);
+                    _logger.fine('_showAddTagDialog: tag added, new count: ${_tags.length}');
+                  } else {
+                    _logger.fine('_showAddTagDialog: tag already exists');
                   }
                 });
+              } else {
+                _logger.fine('_showAddTagDialog: tag is empty, ignoring');
               }
               Navigator.pop(ctx);
             },
@@ -182,7 +201,12 @@ class _CreatePromptScreenState extends ConsumerState<CreatePromptScreen> {
   }
 
   Future<void> _savePrompt() async {
-    if (!_formKey.currentState!.validate()) return;
+    _logger.fine('_savePrompt called, isEditing: ${widget.promptId != null}');
+    if (!_formKey.currentState!.validate()) {
+      _logger.warning('_savePrompt: validation failed');
+      return;
+    }
+    _logger.fine('_savePrompt: validation passed, saving...');
 
     setState(() {
       _isLoading = true;
@@ -213,8 +237,10 @@ class _CreatePromptScreenState extends ConsumerState<CreatePromptScreen> {
             updatedAt: DateTime.now(),
           ),
         );
+        _logger.fine('_savePrompt: invalidating prompt provider');
         // Invalidate the prompt provider so detail screen refreshes
         ref.invalidate(promptProvider(widget.promptId!));
+        _logger.fine('_savePrompt: invalidating prompts provider');
         // Also invalidate the prompts list to refresh list view
         ref.invalidate(promptsProvider);
         if (mounted) {

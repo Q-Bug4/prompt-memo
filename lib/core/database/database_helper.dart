@@ -197,4 +197,45 @@ class DatabaseHelper {
     await db.delete(tableCollections);
     await db.delete(tableSearchHistory);
   }
+
+  /// Insert data into a table
+  Future<int> insert({
+    required String tableName,
+    required Map<String, dynamic> values,
+  }) async {
+    final db = await database;
+    return await db.insert(tableName, values);
+  }
+
+  /// Update data in a table
+  Future<int> update({
+    required String tableName,
+    required Map<String, dynamic> values,
+    String? where,
+    List<Object?>? whereArgs,
+  }) async {
+    final db = await database;
+    return await db.update(tableName, values, where: where, whereArgs: whereArgs);
+  }
+
+  /// Query data from a table
+  Future<List<Map<String, dynamic>>> query({
+    required String tableName,
+    String? where,
+    List<Object?>? whereArgs,
+    String? orderBy,
+  }) async {
+    final db = await database;
+    return await db.query(tableName, where: where, whereArgs: whereArgs, orderBy: orderBy);
+  }
+
+  /// Delete data from a table
+  Future<int> delete({
+    required String tableName,
+    String? where,
+    List<Object?>? whereArgs,
+  }) async {
+    final db = await database;
+    return await db.delete(tableName, where: where, whereArgs: whereArgs);
+  }
 }
