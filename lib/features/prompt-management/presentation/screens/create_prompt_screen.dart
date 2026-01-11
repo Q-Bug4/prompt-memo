@@ -62,16 +62,17 @@ class _CreatePromptScreenState extends ConsumerState<CreatePromptScreen> {
 
     try {
       final repository = ref.read(promptRepositoryProvider);
-      _editingPrompt = await repository.getPromptById(widget.promptId!);
+      final prompt = await repository.getPromptById(widget.promptId!);
 
-      if (_editingPrompt != null) {
+      if (prompt != null) {
+        _editingPrompt = prompt;
         if (mounted) {
-          _logger.fine('CreatePromptScreen: prompt loaded - ${_editingPrompt!.title}');
+          _logger.fine('CreatePromptScreen: prompt loaded - ${prompt.title}');
           setState(() {
-            _titleController.text = _editingPrompt!.title;
-            _contentController.text = _editingPrompt!.content;
-            _collectionId = _editingPrompt!.collectionId;
-            _tags = List.from(_editingPrompt!.tags);
+            _titleController.text = prompt.title;
+            _contentController.text = prompt.content;
+            _collectionId = prompt.collectionId;
+            _tags = List.from(prompt.tags);
           });
 
           final duration = DateTime.now().difference(startTime);
@@ -118,10 +119,15 @@ class _CreatePromptScreenState extends ConsumerState<CreatePromptScreen> {
                       hintText: 'Enter a descriptive title',
                       border: OutlineInputBorder(),
                     ),
+                    maxLength: 100,
+                    buildCounter: (context, {required currentLength, required isFocused, maxLength}) => null,
                     validator: (value) {
                       if (value == null || value.trim().isEmpty) {
                         _logger.finer('CreatePromptScreen: title validation failed');
                         return 'Title is required';
+                      }
+                      if (value.trim().length > 100) {
+                        return 'Title must be 100 characters or less';
                       }
                       return null;
                     },
@@ -136,10 +142,15 @@ class _CreatePromptScreenState extends ConsumerState<CreatePromptScreen> {
                       border: OutlineInputBorder(),
                     ),
                     maxLines: 10,
+                    maxLength: 5000,
+                    buildCounter: (context, {required currentLength, required isFocused, maxLength}) => null,
                     validator: (value) {
                       if (value == null || value.trim().isEmpty) {
                         _logger.finer('CreatePromptScreen: content validation failed');
                         return 'Prompt content is required';
+                      }
+                      if (value.length > 5000) {
+                        return 'Content must be 5000 characters or less';
                       }
                       return null;
                     },

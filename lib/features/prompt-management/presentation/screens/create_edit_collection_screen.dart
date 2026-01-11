@@ -164,9 +164,14 @@ class _CreateEditCollectionScreenState extends ConsumerState<CreateEditCollectio
                         hintText: 'e.g., Work Prompts, Personal Ideas',
                         border: OutlineInputBorder(),
                       ),
+                      maxLength: 100,
+                      buildCounter: (context, {required currentLength, required isFocused, maxLength}) => null,
                       validator: (value) {
                         if (value == null || value.trim().isEmpty) {
                           return 'Please enter a collection name';
+                        }
+                        if (value.trim().length > 100) {
+                          return 'Collection name must be 100 characters or less';
                         }
                         return null;
                       },
@@ -181,6 +186,8 @@ class _CreateEditCollectionScreenState extends ConsumerState<CreateEditCollectio
                         border: OutlineInputBorder(),
                       ),
                       maxLines: 3,
+                      maxLength: 500,
+                      buildCounter: (context, {required currentLength, required isFocused, maxLength}) => null,
                       textCapitalization: TextCapitalization.sentences,
                     ),
                     const SizedBox(height: 24),

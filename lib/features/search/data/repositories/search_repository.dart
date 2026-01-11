@@ -1,10 +1,15 @@
 import 'dart:convert';
 import 'package:prompt_memo/core/database/database_helper.dart';
+import 'package:prompt_memo/core/service_locator.dart';
 import 'package:prompt_memo/shared/models/prompt.dart';
 
 /// Repository for search functionality
 class SearchRepository {
-  final DatabaseHelper _dbHelper = DatabaseHelper();
+  final DatabaseHelper _dbHelper;
+
+  /// Creates a new SearchRepository
+  /// Uses singleton DatabaseHelper from service locator
+  SearchRepository({DatabaseHelper? dbHelper}) : _dbHelper = dbHelper ?? getIt<DatabaseHelper>();
 
   static const int _maxHistoryItems = 50;
 

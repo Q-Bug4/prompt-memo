@@ -1,15 +1,22 @@
 import 'package:uuid/uuid.dart';
 import 'package:prompt_memo/core/database/database_helper.dart';
+import 'package:prompt_memo/core/service_locator.dart';
 import 'package:prompt_memo/shared/models/collection.dart';
 
 /// Repository for managing collections
 class CollectionRepository {
+  final DatabaseHelper _dbHelper;
+
+  /// Creates a new CollectionRepository
+  /// Uses singleton DatabaseHelper from service locator
+  CollectionRepository({DatabaseHelper? dbHelper}) : _dbHelper = dbHelper ?? getIt<DatabaseHelper>();
+
   /// Creates a new collection
   Future<Collection> createCollection({
     required String name,
     String description = '',
   }) async {
-    final db = await DatabaseHelper().database;
+    final db = await _dbHelper.database;
     final id = const Uuid().v4();
     final now = DateTime.now();
 
@@ -41,7 +48,7 @@ class CollectionRepository {
 
   /// Gets all collections
   Future<List<Collection>> getAllCollections() async {
-    final db = await DatabaseHelper().database;
+    final db = await _dbHelper.database;
     final List<Map<String, dynamic>> maps = await db.query(
       DatabaseHelper.tableCollections,
       orderBy: '${DatabaseHelper.colUpdatedAt} DESC',
@@ -51,7 +58,7 @@ class CollectionRepository {
 
   /// Gets collection by ID
   Future<Collection?> getCollectionById(String id) async {
-    final db = await DatabaseHelper().database;
+    final db = await _dbHelper.database;
     final List<Map<String, dynamic>> maps = await db.query(
       DatabaseHelper.tableCollections,
       where: '${DatabaseHelper.colId} = ?',
@@ -64,7 +71,7 @@ class CollectionRepository {
 
   /// Updates a collection
   Future<void> updateCollection(Collection collection) async {
-    final db = await DatabaseHelper().database;
+    final db = await _dbHelper.database;
     final now = DateTime.now();
 
     await db.update(
@@ -81,7 +88,7 @@ class CollectionRepository {
 
   /// Deletes a collection
   Future<void> deleteCollection(String id) async {
-    final db = await DatabaseHelper().database;
+    final db = await _dbHelper.database;
     await db.delete(
       DatabaseHelper.tableCollections,
       where: '${DatabaseHelper.colId} = ?',

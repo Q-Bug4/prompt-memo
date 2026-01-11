@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:uuid/uuid.dart';
 import 'package:prompt_memo/core/database/database_helper.dart';
+import 'package:prompt_memo/core/service_locator.dart';
 import 'package:prompt_memo/core/storage/filesystem_storage.dart';
 import 'package:prompt_memo/shared/models/prompt.dart';
 import 'package:prompt_memo/shared/models/result_sample.dart';
@@ -10,8 +11,8 @@ class PromptRepository {
   final DatabaseHelper _dbHelper;
 
   /// Creates a new PromptRepository
-  /// For testing, you can inject a mock DatabaseHelper
-  PromptRepository({DatabaseHelper? dbHelper}) : _dbHelper = dbHelper ?? DatabaseHelper();
+  /// Uses singleton DatabaseHelper from service locator
+  PromptRepository({DatabaseHelper? dbHelper}) : _dbHelper = dbHelper ?? getIt<DatabaseHelper>();
 
   /// Creates a new prompt
   Future<Prompt> createPrompt({
