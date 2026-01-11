@@ -313,8 +313,34 @@ Widget _buildResultCard(BuildContext ctx, ResultSample result) {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Preview area
-            _buildPreview(result),
+            // Preview area with delete button
+            Stack(
+              children: [
+                _buildPreview(result),
+                Positioned(
+                  top: 4,
+                  right: 4,
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: () => _showDeleteResultDialog(ctx, result),
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: Colors.black54,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(
+                          Icons.close,
+                          size: 16,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
             // Filename
             Padding(
               padding: const EdgeInsets.all(8),
@@ -584,6 +610,72 @@ void _showDeleteDialog(BuildContext ctx, WidgetRef ref, String promptId) {
       ],
     ),
   );
+}
+
+void _showDeleteResultDialog(BuildContext ctx, ResultSample result) {
+  _logger.info('_showDeleteResultDialog called, result = ${result.id}');
+  showDialog(
+    context: ctx,
+    builder: (dialogCtx) => AlertDialog(
+      title: const Text('Delete Attachment'),
+      content: Text(
+        'Are you sure you want to delete "${result.fileName}"? '
+        'This will permanently delete the file.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(dialogCtx),
+          child: const Text('Cancel'),
+        ),
+        Consumer(
+          builder: (context, ref, _) {
+            return TextButton(
+              onPressed: () async {
+                Navigator.pop(dialogCtx);
+                await _deleteResultSample(ref, result);
+              },
+              style: TextButton.styleFrom(
+                foregroundColor: Colors.red,
+              ),
+              child: const Text('Delete'),
+            );
+          },
+        ),
+      ],
+    ),
+  );
+}
+
+/// Deletes a result sample (attachment) - removes both database record and file
+Future<void> _deleteResultSample(WidgetRef ref, ResultSample result) async {
+  _logger.info('_deleteResultSample called, result = ${result.id}');
+  try {
+    final repository = ref.read(promptRepositoryProvider);
+    await repository.deleteResultSample(result.id);
+    _logger.info('result sample deleted successfully');
+
+    // Refresh results provider to update UI
+    ref.invalidate(resultSamplesProvider(result.promptId));
+
+    if (ref.context.mounted) {
+      ScaffoldMessenger.of(ref.context).showSnackBar(
+        const SnackBar(
+          content: Text('Attachment deleted'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+  } catch (e, s) {
+    _logger.severe('ERROR deleting result sample: $e', e, s);
+    if (ref.context.mounted) {
+      ScaffoldMessenger.of(ref.context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to delete attachment: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
 }
 
 String _formatDate(DateTime date) {
