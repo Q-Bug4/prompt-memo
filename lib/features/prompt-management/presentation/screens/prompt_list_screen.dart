@@ -25,48 +25,103 @@ class _PromptListScreenState extends ConsumerState<PromptListScreen> {
   @override
   void initState() {
     super.initState();
-    _logger.fine('PromptListScreen: initState');
+    _logger.fine('PromptListScreen: initState - initializing screen');
     // Auto-load prompts when entering screen
     _refreshPromptsAndSamples();
   }
 
+  @override
+  void dispose() {
+    _logger.fine('PromptListScreen: dispose - cleaning up resources');
+    super.dispose();
+  }
+
   /// Unified method to refresh prompts and samples - use this for all home screen navigation
   Future<void> _refreshPromptsAndSamples() async {
-    _logger.fine('_refreshPromptsAndSamples called');
-    // Clear samples cache to force reload
-    _promptSamples.clear();
-    // Load prompts
-    await ref.read(promptListNotifierProvider.notifier).loadPrompts();
+    _logger.info('PromptListScreen: _refreshPromptsAndSamples - starting refresh');
+    final startTime = DateTime.now();
+
+    try {
+      // Clear samples cache to force reload
+      final cachedSamplesCount = _promptSamples.length;
+      _promptSamples.clear();
+      _logger.finer('PromptListScreen: cleared $cachedSamplesCount cached samples');
+
+      // Load prompts
+      _logger.finer('PromptListScreen: loading prompts from repository');
+      await ref.read(promptListNotifierProvider.notifier).loadPrompts();
+      _logger.finer('PromptListScreen: prompts loaded successfully');
+
+      final duration = DateTime.now().difference(startTime);
+      _logger.info('PromptListScreen: _refreshPromptsAndSamples completed in ${duration.inMilliseconds}ms');
+    } catch (e, s) {
+      _logger.severe('PromptListScreen: _refreshPromptsAndSamples failed', e, s);
+      rethrow;
+    }
   }
 
   Future<void> _loadAllResultSamples(List<Prompt> prompts) async {
-    if (_isLoadingSamples) return;
-    _isLoadingSamples = true;
-
-    final repository = ref.read(promptRepositoryProvider);
-    final Map<String, List<ResultSample>> samplesMap = {};
-
-    for (final prompt in prompts) {
-      // Skip if already loaded (unless cache was cleared)
-      if (!_promptSamples.containsKey(prompt.id)) {
-        final samples = await repository.getResultSamples(prompt.id);
-        samplesMap[prompt.id] = samples;
-      }
+    if (_isLoadingSamples) {
+      _logger.finer('PromptListScreen: _loadAllResultSamples - already loading, skipping');
+      return;
     }
 
-    if (mounted) {
-      setState(() {
-        _promptSamples.addAll(samplesMap);
-        _isLoadingSamples = false;
-      });
+    _logger.fine('PromptListScreen: _loadAllResultSamples - starting to load samples for ${prompts.length} prompts');
+    _isLoadingSamples = true;
+    final startTime = DateTime.now();
+
+    try {
+      final repository = ref.read(promptRepositoryProvider);
+      final Map<String, List<ResultSample>> samplesMap = {};
+      int loadedCount = 0;
+      int skippedCount = 0;
+
+      for (final prompt in prompts) {
+        // Skip if already loaded (unless cache was cleared)
+        if (_promptSamples.containsKey(prompt.id)) {
+          _logger.finest('PromptListScreen: skipping already loaded samples for prompt ${prompt.id}');
+          skippedCount++;
+          continue;
+        }
+
+        try {
+          _logger.finest('PromptListScreen: loading samples for prompt ${prompt.id}');
+          final samples = await repository.getResultSamples(prompt.id);
+          samplesMap[prompt.id] = samples;
+          loadedCount++;
+          _logger.finest('PromptListScreen: loaded ${samples.length} samples for prompt ${prompt.id}');
+        } catch (e, s) {
+          _logger.warning('PromptListScreen: failed to load samples for prompt ${prompt.id}', e, s);
+          // Continue loading other prompts
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _promptSamples.addAll(samplesMap);
+          _isLoadingSamples = false;
+        });
+
+        final duration = DateTime.now().difference(startTime);
+        _logger.fine('PromptListScreen: _loadAllResultSamples completed - loaded: $loadedCount, skipped: $skippedCount, took ${duration.inMilliseconds}ms');
+      } else {
+        _logger.warning('PromptListScreen: _loadAllResultSamples - widget not mounted, skipping setState');
+      }
+    } catch (e, s) {
+      _logger.severe('PromptListScreen: _loadAllResultSamples failed', e, s);
+      if (mounted) {
+        setState(() {
+          _isLoadingSamples = false;
+        });
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    _logger.fine('PromptListScreen: build');
+    _logger.finest('PromptListScreen: build - building widget tree');
     final prompts = ref.watch(promptListNotifierProvider);
-    _logger.fine('PromptListScreen: ${prompts.length} prompts loaded');
+    _logger.finest('PromptListScreen: build - displaying ${prompts.length} prompts');
 
     // Load result samples for prompts that don't have them yet
     Future.microtask(() => _loadAllResultSamples(prompts));
@@ -77,16 +132,23 @@ class _PromptListScreenState extends ConsumerState<PromptListScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.search),
-            onPressed: () => context.push('/search'),
+            onPressed: () {
+              _logger.info('PromptListScreen: search button pressed - navigating to /search');
+              context.push('/search');
+            },
             tooltip: 'Search',
           ),
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: _refreshPromptsAndSamples,
+            onPressed: () {
+              _logger.info('PromptListScreen: refresh button pressed');
+              _refreshPromptsAndSamples();
+            },
             tooltip: 'Refresh',
           ),
           PopupMenuButton<String>(
             onSelected: (value) {
+              _logger.info('PromptListScreen: popup menu selected - value: $value');
               if (value == 'collections') {
                 _showCollectionsDialog(context);
               }
@@ -109,10 +171,14 @@ class _PromptListScreenState extends ConsumerState<PromptListScreen> {
       floatingActionButton: FloatingActionButton(
         tooltip: 'Create Prompt',
         onPressed: () async {
+          _logger.info('PromptListScreen: FAB pressed - navigating to /prompt/new');
           await context.push('/prompt/new');
           // Refresh list when returning from create/edit screen
           if (mounted) {
+            _logger.info('PromptListScreen: returned from create/edit screen - refreshing list');
             _refreshPromptsAndSamples();
+          } else {
+            _logger.warning('PromptListScreen: FAB navigation returned but widget not mounted');
           }
         },
         child: const Icon(Icons.add),
@@ -121,6 +187,7 @@ class _PromptListScreenState extends ConsumerState<PromptListScreen> {
   }
 
   Widget _buildEmptyState() {
+    _logger.finer('PromptListScreen: building empty state widget');
     return const Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -146,6 +213,7 @@ class _PromptListScreenState extends ConsumerState<PromptListScreen> {
   }
 
   Widget _buildPromptList(List<Prompt> prompts) {
+    _logger.finest('PromptListScreen: building prompt list with ${prompts.length} items');
     return ListView.builder(
       itemCount: prompts.length,
       itemBuilder: (ctx, index) {
@@ -156,6 +224,7 @@ class _PromptListScreenState extends ConsumerState<PromptListScreen> {
   }
 
   Widget _buildAttachmentThumbnails(List<ResultSample> samples) {
+    _logger.finest('PromptListScreen: building ${samples.length} attachment thumbnails');
     return Wrap(
       spacing: 8,
       runSpacing: 8,
@@ -166,6 +235,7 @@ class _PromptListScreenState extends ConsumerState<PromptListScreen> {
           case FileType.image:
             return _buildImageThumbnail(sample);
           case FileType.video:
+            _logger.finest('PromptListScreen: skipping video attachment ${sample.id}');
             return const SizedBox.shrink(); // Hide video attachments
         }
       }).toList(),
@@ -173,10 +243,16 @@ class _PromptListScreenState extends ConsumerState<PromptListScreen> {
   }
 
   Widget _buildTextThumbnail(ResultSample sample) {
+    _logger.finest('PromptListScreen: building text thumbnail for ${sample.fileName}');
     return FutureBuilder<String>(
       future: _readFileContent(sample.filePath, 20),
       builder: (context, snapshot) {
         final content = snapshot.data ?? '';
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          _logger.finest('PromptListScreen: loading text content for ${sample.fileName}');
+        } else if (snapshot.hasError) {
+          _logger.warning('PromptListScreen: failed to load text content for ${sample.fileName}: ${snapshot.error}');
+        }
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
@@ -196,6 +272,7 @@ class _PromptListScreenState extends ConsumerState<PromptListScreen> {
   }
 
   Widget _buildImageThumbnail(ResultSample sample) {
+    _logger.finest('PromptListScreen: building image thumbnail for ${sample.fileName}');
     return Container(
       width: 60,
       height: 60,
@@ -209,6 +286,7 @@ class _PromptListScreenState extends ConsumerState<PromptListScreen> {
           File(sample.filePath),
           fit: BoxFit.cover,
           errorBuilder: (context, error, stackTrace) {
+            _logger.warning('PromptListScreen: failed to load image thumbnail for ${sample.fileName}: $error');
             return Container(
               color: Colors.grey[200],
               child: const Icon(Icons.broken_image, size: 24, color: Colors.grey),
@@ -220,28 +298,39 @@ class _PromptListScreenState extends ConsumerState<PromptListScreen> {
   }
 
   Future<String> _readFileContent(String path, int maxChars) async {
+    _logger.finest('PromptListScreen: reading file content from $path (max: $maxChars chars)');
     try {
       final file = File(path);
       if (await file.exists()) {
         final content = await file.readAsString();
-        return content.length > maxChars ? content.substring(0, maxChars) : content;
+        final truncatedContent = content.length > maxChars ? content.substring(0, maxChars) : content;
+        _logger.finest('PromptListScreen: successfully read ${content.length} chars from file');
+        return truncatedContent;
+      } else {
+        _logger.warning('PromptListScreen: file does not exist: $path');
       }
-    } catch (e) {
-      _logger.warning('Failed to read file: $path, error: $e');
+    } catch (e, s) {
+      _logger.warning('PromptListScreen: failed to read file: $path', e, s);
     }
     return '';
   }
 
   Widget _buildPromptCard(BuildContext ctx, Prompt prompt) {
     final samples = _promptSamples[prompt.id] ?? [];
+    _logger.finest('PromptListScreen: building card for prompt ${prompt.id} (${prompt.title}) with ${samples.length} samples');
+
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       child: InkWell(
         onTap: () async {
+          _logger.info('PromptListScreen: prompt card tapped - promptId: ${prompt.id}, title: ${prompt.title}');
           await ctx.push('/prompt/${prompt.id}');
           // Refresh list when returning from detail/edit screen
           if (mounted) {
+            _logger.info('PromptListScreen: returned from detail screen for prompt ${prompt.id} - refreshing list');
             _refreshPromptsAndSamples();
+          } else {
+            _logger.warning('PromptListScreen: returned from detail screen but widget not mounted');
           }
         },
         child: Padding(
@@ -331,6 +420,7 @@ class _PromptListScreenState extends ConsumerState<PromptListScreen> {
   }
 
   void _showCollectionsDialog(BuildContext context) {
+    _logger.info('PromptListScreen: showing collections dialog');
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -338,7 +428,10 @@ class _PromptListScreenState extends ConsumerState<PromptListScreen> {
         content: const Text('Collections feature coming soon'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(ctx),
+            onPressed: () {
+              _logger.fine('PromptListScreen: collections dialog closed');
+              Navigator.pop(ctx);
+            },
             child: const Text('Close'),
           ),
         ],

@@ -23,7 +23,7 @@ class PromptDetailScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    _logger.info('build, promptId = $promptId');
+    _logger.info('PromptDetailScreen: build - promptId: $promptId');
     return Scaffold(
       appBar: AppBar(
         title: const Text('Prompt Details'),
@@ -31,14 +31,14 @@ class PromptDetailScreen extends ConsumerWidget {
           IconButton(
             icon: const Icon(Icons.edit),
             onPressed: () {
-              _logger.info('edit button pressed, navigating to /prompt/$promptId/edit');
+              _logger.info('PromptDetailScreen: edit button pressed - navigating to /prompt/$promptId/edit');
               context.push('/prompt/$promptId/edit');
             },
             tooltip: 'Edit',
           ),
           PopupMenuButton<String>(
             onSelected: (value) {
-              _logger.fine('PopupMenuButton onSelected, value = $value');
+              _logger.info('PromptDetailScreen: popup menu selected - value: $value');
               if (value == 'delete') {
                 _showDeleteDialog(context, ref, promptId);
               }
@@ -57,21 +57,20 @@ class PromptDetailScreen extends ConsumerWidget {
       ),
       body: Consumer(
         builder: (ctx, ref, _) {
-          _logger.fine('Consumer body builder');
+          _logger.finest('PromptDetailScreen: Consumer builder - watching providers');
           final promptAsync = ref.watch(promptProvider(promptId));
           final resultsAsync = ref.watch(resultSamplesProvider(promptId));
 
-          _logger.finer('promptAsync value = ${promptAsync.value}');
-          _logger.finer('resultsAsync value = ${resultsAsync.value}');
+          _logger.finest('PromptDetailScreen: promptAsync state: ${promptAsync.runtimeType}');
+          _logger.finest('PromptDetailScreen: resultsAsync state: ${resultsAsync.runtimeType}');
 
           return promptAsync.when(
             data: (prompt) {
-              _logger.info('prompt data, prompt = $prompt');
               if (prompt == null) {
-                _logger.warning('prompt is null, showing not found');
+                _logger.warning('PromptDetailScreen: prompt not found for id: $promptId');
                 return _buildNotFound();
               }
-              _logger.info('prompt exists, showing content');
+              _logger.fine('PromptDetailScreen: displaying prompt: ${prompt.title} with ${resultsAsync.value?.length ?? 0} attachments');
               return Column(
                 children: [
                   Expanded(
@@ -94,11 +93,11 @@ class PromptDetailScreen extends ConsumerWidget {
               );
             },
             loading: () {
-              _logger.fine('prompt loading');
+              _logger.fine('PromptDetailScreen: loading prompt data');
               return const Center(child: CircularProgressIndicator());
             },
             error: (error, stack) {
-              _logger.severe('prompt error, error = $error', error, stack);
+              _logger.severe('PromptDetailScreen: error loading prompt', error, stack);
               return _buildError(ctx, error);
             },
           );
@@ -109,7 +108,7 @@ class PromptDetailScreen extends ConsumerWidget {
 }
 
 Widget _buildNotFound() {
-  _logger.warning('_buildNotFound called');
+  _logger.warning('PromptDetailScreen: building not found widget');
   return const Center(
     child: Column(
       mainAxisAlignment: MainAxisAlignment.center,
@@ -126,7 +125,7 @@ Widget _buildNotFound() {
 }
 
 Widget _buildError(BuildContext ctx, Object error) {
-  _logger.severe('_buildError called, error = $error');
+  _logger.severe('PromptDetailScreen: building error widget - error: $error');
   return Center(
     child: Column(
       mainAxisAlignment: MainAxisAlignment.center,
@@ -148,7 +147,7 @@ Widget _buildError(BuildContext ctx, Object error) {
 }
 
 Widget _buildPromptHeader(Prompt prompt) {
-  _logger.fine('_buildPromptHeader called, prompt = ${prompt.title}');
+  _logger.finest('PromptDetailScreen: building header for: ${prompt.title}');
   return Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
@@ -183,7 +182,7 @@ Widget _buildChip(IconData icon, String label) {
 }
 
 Widget _buildPromptContent(Prompt prompt) {
-  _logger.fine('_buildPromptContent called');
+  _logger.finest('PromptDetailScreen: building content section');
   return Card(
     child: Padding(
       padding: const EdgeInsets.all(16),
@@ -202,7 +201,10 @@ Widget _buildPromptContent(Prompt prompt) {
               const Spacer(),
               IconButton(
                 icon: const Icon(Icons.copy, size: 18),
-                onPressed: () => _copyToClipboard(prompt.content),
+                onPressed: () {
+                  _logger.info('PromptDetailScreen: copy button pressed - copying content to clipboard');
+                  _copyToClipboard(prompt.content);
+                },
                 tooltip: 'Copy',
                 visualDensity: VisualDensity.compact,
                 padding: EdgeInsets.zero,
@@ -219,14 +221,19 @@ Widget _buildPromptContent(Prompt prompt) {
 }
 
 Future<void> _copyToClipboard(String text) async {
-  await Clipboard.setData(ClipboardData(text: text));
+  try {
+    await Clipboard.setData(ClipboardData(text: text));
+    _logger.fine('PromptDetailScreen: content copied to clipboard (${text.length} chars)');
+  } catch (e, s) {
+    _logger.warning('PromptDetailScreen: failed to copy to clipboard', e, s);
+  }
 }
 
 Widget _buildResultsSection(
   BuildContext ctx,
   AsyncValue<List<ResultSample>> resultsAsync,
 ) {
-  _logger.fine('_buildResultsSection called');
+  _logger.finest('PromptDetailScreen: building results section');
   return Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
@@ -242,7 +249,6 @@ Widget _buildResultsSection(
           const Spacer(),
           resultsAsync.when(
             data: (results) {
-              _logger.finer('results data, count = ${results.length}');
               return Text('${results.length} ${results.length == 1 ? 'result' : 'results'}');
             },
             loading: () => const SizedBox.shrink(),
@@ -253,9 +259,9 @@ Widget _buildResultsSection(
       const SizedBox(height: 12),
       resultsAsync.when(
         data: (results) {
-          _logger.finer('results async data, count = ${results.length}');
+          _logger.finest('PromptDetailScreen: displaying ${results.length} results');
           if (results.isEmpty) {
-            _logger.fine('results is empty, showing empty state');
+            _logger.fine('PromptDetailScreen: no results to display');
             return const Card(
               child: Padding(
                 padding: EdgeInsets.all(24),
@@ -274,7 +280,7 @@ Widget _buildResultsSection(
               ),
             );
           }
-          _logger.fine('building result cards, count = ${results.length}');
+          _logger.fine('PromptDetailScreen: building result cards');
           return Wrap(
             spacing: 12,
             runSpacing: 12,
@@ -282,11 +288,11 @@ Widget _buildResultsSection(
           );
         },
         loading: () {
-          _logger.fine('results loading');
+          _logger.fine('PromptDetailScreen: loading results');
           return const Center(child: CircularProgressIndicator());
         },
-        error: (error, _) {
-          _logger.severe('results error, error = $error');
+        error: (error, stack) {
+          _logger.severe('PromptDetailScreen: error loading results', error, stack);
           return _buildErrorCard(ctx, error);
         },
       ),
@@ -295,17 +301,18 @@ Widget _buildResultsSection(
 }
 
 Widget _buildResultCard(BuildContext ctx, ResultSample result) {
-  _logger.fine('_buildResultCard called, file = ${result.fileName}');
+  _logger.finest('PromptDetailScreen: building card for attachment: ${result.fileName} (${result.fileType.name})');
 
   // Don't show video attachments
   if (result.fileType == FileType.video) {
+    _logger.finest('PromptDetailScreen: skipping video attachment: ${result.id}');
     return const SizedBox.shrink();
   }
 
   return Card(
     child: InkWell(
       onTap: () {
-        _logger.fine('_buildResultCard: onTap, file = ${result.fileName}');
+        _logger.info('PromptDetailScreen: attachment card tapped - ${result.fileName}');
         _openFileViewer(ctx, result);
       },
       child: Container(
@@ -323,7 +330,10 @@ Widget _buildResultCard(BuildContext ctx, ResultSample result) {
                   child: Material(
                     color: Colors.transparent,
                     child: InkWell(
-                      onTap: () => _showDeleteResultDialog(ctx, result),
+                      onTap: () {
+                        _logger.info('PromptDetailScreen: delete button pressed - attachment: ${result.fileName}');
+                        _showDeleteResultDialog(ctx, result);
+                      },
                       child: Container(
                         padding: const EdgeInsets.all(4),
                         decoration: BoxDecoration(
@@ -362,6 +372,7 @@ Widget _buildResultCard(BuildContext ctx, ResultSample result) {
 }
 
 Widget _buildPreview(ResultSample result) {
+  _logger.finest('PromptDetailScreen: building preview for ${result.fileType.name}');
   switch (result.fileType) {
     case FileType.text:
       return _buildTextPreview(result);
@@ -373,10 +384,17 @@ Widget _buildPreview(ResultSample result) {
 }
 
 Widget _buildTextPreview(ResultSample result) {
+  _logger.finest('PromptDetailScreen: building text preview for ${result.fileName}');
   return FutureBuilder<String>(
     future: _readFileContent(result.filePath, 50),
     builder: (context, snapshot) {
       final content = snapshot.data ?? '';
+      if (snapshot.connectionState == ConnectionState.waiting) {
+        _logger.finest('PromptDetailScreen: loading text content for ${result.fileName}');
+      } else if (snapshot.hasError) {
+        _logger.warning('PromptDetailScreen: failed to load text preview for ${result.fileName}: ${snapshot.error}');
+      }
+
       return Container(
         width: 150,
         height: 100,
@@ -400,6 +418,7 @@ Widget _buildTextPreview(ResultSample result) {
 }
 
 Widget _buildImagePreview(ResultSample result) {
+  _logger.finest('PromptDetailScreen: building image preview for ${result.fileName}');
   return Container(
     width: 150,
     height: 100,
@@ -409,6 +428,7 @@ Widget _buildImagePreview(ResultSample result) {
         File(result.filePath),
         fit: BoxFit.cover,
         errorBuilder: (context, error, stackTrace) {
+          _logger.warning('PromptDetailScreen: failed to load image preview for ${result.fileName}: $error');
           return Container(
             color: Colors.grey[200],
             child: const Center(
@@ -422,20 +442,25 @@ Widget _buildImagePreview(ResultSample result) {
 }
 
 Future<String> _readFileContent(String path, int maxChars) async {
+  _logger.finest('PromptDetailScreen: reading file content from $path (max: $maxChars chars)');
   try {
     final file = File(path);
     if (await file.exists()) {
       final content = await file.readAsString();
-      return content.length > maxChars ? content.substring(0, maxChars) : content;
+      final truncatedContent = content.length > maxChars ? content.substring(0, maxChars) : content;
+      _logger.finest('PromptDetailScreen: successfully read ${content.length} chars from file');
+      return truncatedContent;
+    } else {
+      _logger.warning('PromptDetailScreen: file does not exist: $path');
     }
-  } catch (e) {
-    _logger.warning('Failed to read file: $path, error = $e');
+  } catch (e, s) {
+    _logger.warning('PromptDetailScreen: failed to read file: $path', e, s);
   }
   return '';
 }
 
 Widget _buildErrorCard(BuildContext ctx, Object error) {
-  _logger.severe('_buildErrorCard called, error = $error');
+  _logger.severe('PromptDetailScreen: building error card - error: $error');
   return Card(
     color: Colors.red.shade50,
     child: Padding(
@@ -457,7 +482,7 @@ Widget _buildErrorCard(BuildContext ctx, Object error) {
 }
 
 Widget _buildAddResultButton(BuildContext ctx, WidgetRef ref, String promptId) {
-  _logger.fine('_buildAddResultButton called, promptId = $promptId');
+  _logger.finest('PromptDetailScreen: building add result button');
   return Container(
     padding: const EdgeInsets.all(16),
     decoration: BoxDecoration(
@@ -473,6 +498,7 @@ Widget _buildAddResultButton(BuildContext ctx, WidgetRef ref, String promptId) {
     child: SafeArea(
       child: ElevatedButton.icon(
         onPressed: () {
+          _logger.info('PromptDetailScreen: add result button pressed');
           _showAddResultDialog(ctx, ref, promptId);
         },
         icon: const Icon(Icons.add),
@@ -486,7 +512,7 @@ Widget _buildAddResultButton(BuildContext ctx, WidgetRef ref, String promptId) {
 }
 
 void _openFileViewer(BuildContext ctx, ResultSample result) {
-  _logger.fine('_openFileViewer called, file = ${result.fileName}');
+  _logger.info('PromptDetailScreen: opening file viewer - type: ${result.fileType.name}, file: ${result.fileName}');
   Widget viewer;
 
   switch (result.fileType) {
@@ -501,37 +527,40 @@ void _openFileViewer(BuildContext ctx, ResultSample result) {
   Navigator.of(ctx).push(
     MaterialPageRoute(builder: (context) => viewer),
   );
+  _logger.fine('PromptDetailScreen: file viewer navigation completed');
 }
 
 void _showAddResultDialog(BuildContext ctx, WidgetRef ref, String promptId) {
-  _logger.info('_showAddResultDialog called, promptId = $promptId');
+  _logger.info('PromptDetailScreen: showing add result dialog - promptId: $promptId');
   showDialog(
     context: ctx,
     builder: (dialogCtx) => FilePickerDialog(
       onFileSelected: (file) async {
-        _logger.fine('FilePickerDialog onFileSelected, file = ${file?.name ?? "null"}');
+        _logger.fine('PromptDetailScreen: file selected - ${file?.name ?? "null"}');
 
         if (file == null) {
-          _logger.fine('file is null, returning');
+          _logger.fine('PromptDetailScreen: file selection cancelled');
           return;
         }
 
+        final startTime = DateTime.now();
         try {
-          _logger.info('storing file to filesystem...');
+          // Store file to filesystem
+          _logger.info('PromptDetailScreen: storing file to filesystem - ${file.name} (${file.size} bytes)');
           final storage = FilesystemStorage();
           final filePath = await storage.storeFile(
             promptId: promptId,
             fileName: file.name,
             bytes: file.bytes!,
           );
-          _logger.info('file stored at $filePath');
+          _logger.fine('PromptDetailScreen: file stored at: $filePath');
 
           // Add to database
-          _logger.info('adding to database...');
+          _logger.info('PromptDetailScreen: adding result sample to database');
           final repository = ref.read(promptRepositoryProvider);
           final storage2 = FilesystemStorage();
           final mimeType = storage2.getMimeType(file.name);
-          _logger.fine('mimeType = $mimeType');
+          _logger.finer('PromptDetailScreen: detected mime type: $mimeType');
 
           await repository.createResultSample(
             promptId: promptId,
@@ -541,14 +570,17 @@ void _showAddResultDialog(BuildContext ctx, WidgetRef ref, String promptId) {
             fileType: file.type.name,
             mimeType: mimeType,
           );
-          _logger.info('added to database successfully');
+          _logger.info('PromptDetailScreen: result sample added to database successfully');
 
           // Refresh results provider to update UI
-          _logger.fine('invalidating result samples provider...');
+          _logger.fine('PromptDetailScreen: invalidating result samples provider');
           ref.invalidate(resultSamplesProvider(promptId));
-          _logger.fine('provider invalidated');
+          _logger.fine('PromptDetailScreen: provider invalidated');
+
+          final duration = DateTime.now().difference(startTime);
+          _logger.info('PromptDetailScreen: file upload completed in ${duration.inMilliseconds}ms');
         } catch (e, s) {
-          _logger.severe('ERROR storing file or adding to database: $e', e, s);
+          _logger.severe('PromptDetailScreen: failed to save file or add to database', e, s);
           if (ctx.mounted) {
             ScaffoldMessenger.of(ctx).showSnackBar(
               SnackBar(
@@ -560,8 +592,8 @@ void _showAddResultDialog(BuildContext ctx, WidgetRef ref, String promptId) {
           return;
         }
 
-        // For now, just show file was added
-        _logger.info('showing success snackbar');
+        // Show success message
+        _logger.info('PromptDetailScreen: showing success snackbar');
         if (ctx.mounted) {
           ScaffoldMessenger.of(ctx).showSnackBar(
             const SnackBar(
@@ -570,6 +602,7 @@ void _showAddResultDialog(BuildContext ctx, WidgetRef ref, String promptId) {
             ),
           );
           Navigator.pop(ctx);
+          _logger.fine('PromptDetailScreen: closed add result dialog');
         }
       },
     ),
@@ -577,7 +610,7 @@ void _showAddResultDialog(BuildContext ctx, WidgetRef ref, String promptId) {
 }
 
 void _showDeleteDialog(BuildContext ctx, WidgetRef ref, String promptId) {
-  _logger.info('_showDeleteDialog called, promptId = $promptId');
+  _logger.info('PromptDetailScreen: showing delete prompt dialog - promptId: $promptId');
   showDialog(
     context: ctx,
     builder: (dialogCtx) => AlertDialog(
@@ -588,18 +621,40 @@ void _showDeleteDialog(BuildContext ctx, WidgetRef ref, String promptId) {
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.pop(dialogCtx),
+          onPressed: () {
+            _logger.fine('PromptDetailScreen: delete prompt cancelled');
+            Navigator.pop(dialogCtx);
+          },
           child: const Text('Cancel'),
         ),
         TextButton(
           onPressed: () async {
+            _logger.info('PromptDetailScreen: deleting prompt - promptId: $promptId');
             Navigator.pop(dialogCtx);
-            final repository = ref.read(promptRepositoryProvider);
-            await repository.deletePrompt(promptId);
-            // Refresh the home page's notifier to clear cache
-            ref.read(promptListNotifierProvider.notifier).loadPrompts();
-            if (ctx.mounted) {
-              ctx.pop();
+
+            try {
+              final repository = ref.read(promptRepositoryProvider);
+              await repository.deletePrompt(promptId);
+              _logger.info('PromptDetailScreen: prompt deleted successfully');
+
+              // Refresh the home page's notifier to clear cache
+              ref.read(promptListNotifierProvider.notifier).loadPrompts();
+              _logger.fine('PromptDetailScreen: home page refresh triggered');
+
+              if (ctx.mounted) {
+                ctx.pop();
+                _logger.fine('PromptDetailScreen: navigated back to home screen');
+              }
+            } catch (e, s) {
+              _logger.severe('PromptDetailScreen: failed to delete prompt', e, s);
+              if (ctx.mounted) {
+                ScaffoldMessenger.of(ctx).showSnackBar(
+                  SnackBar(
+                    content: Text('Failed to delete prompt: $e'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
             }
           },
           style: TextButton.styleFrom(
@@ -613,7 +668,7 @@ void _showDeleteDialog(BuildContext ctx, WidgetRef ref, String promptId) {
 }
 
 void _showDeleteResultDialog(BuildContext ctx, ResultSample result) {
-  _logger.info('_showDeleteResultDialog called, result = ${result.id}');
+  _logger.info('PromptDetailScreen: showing delete attachment dialog - ${result.fileName}');
   showDialog(
     context: ctx,
     builder: (dialogCtx) => AlertDialog(
@@ -624,13 +679,17 @@ void _showDeleteResultDialog(BuildContext ctx, ResultSample result) {
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.pop(dialogCtx),
+          onPressed: () {
+            _logger.fine('PromptDetailScreen: delete attachment cancelled');
+            Navigator.pop(dialogCtx);
+          },
           child: const Text('Cancel'),
         ),
         Consumer(
           builder: (context, ref, _) {
             return TextButton(
               onPressed: () async {
+                _logger.info('PromptDetailScreen: deleting attachment - ${result.fileName}');
                 Navigator.pop(dialogCtx);
                 await _deleteResultSample(ref, result);
               },
@@ -648,14 +707,20 @@ void _showDeleteResultDialog(BuildContext ctx, ResultSample result) {
 
 /// Deletes a result sample (attachment) - removes both database record and file
 Future<void> _deleteResultSample(WidgetRef ref, ResultSample result) async {
-  _logger.info('_deleteResultSample called, result = ${result.id}');
+  final startTime = DateTime.now();
+  _logger.info('PromptDetailScreen: _deleteResultSample - ${result.fileName} (id: ${result.id})');
+
   try {
     final repository = ref.read(promptRepositoryProvider);
     await repository.deleteResultSample(result.id);
-    _logger.info('result sample deleted successfully');
+    _logger.info('PromptDetailScreen: attachment deleted successfully');
 
     // Refresh results provider to update UI
+    _logger.fine('PromptDetailScreen: invalidating result samples provider');
     ref.invalidate(resultSamplesProvider(result.promptId));
+
+    final duration = DateTime.now().difference(startTime);
+    _logger.info('PromptDetailScreen: attachment deletion completed in ${duration.inMilliseconds}ms');
 
     if (ref.context.mounted) {
       ScaffoldMessenger.of(ref.context).showSnackBar(
@@ -666,7 +731,7 @@ Future<void> _deleteResultSample(WidgetRef ref, ResultSample result) async {
       );
     }
   } catch (e, s) {
-    _logger.severe('ERROR deleting result sample: $e', e, s);
+    _logger.severe('PromptDetailScreen: failed to delete attachment', e, s);
     if (ref.context.mounted) {
       ScaffoldMessenger.of(ref.context).showSnackBar(
         SnackBar(
