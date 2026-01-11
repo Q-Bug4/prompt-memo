@@ -13,59 +13,37 @@ class SearchRepository {
 
   static const int _maxHistoryItems = 50;
 
-  /// Searches prompts using full-text search
+  /// Searches prompts using fuzzy search (LIKE)
+  ///
+  /// Performs fuzzy search on title and content fields using SQL LIKE.
+  /// Optionally filters by collection ID.
   Future<List<Prompt>> searchPrompts({
     required String query,
     String? collectionId,
-    List<String>? tags,
-    DateTime? startDate,
-    DateTime? endDate,
-    bool mostUsedFirst = false,
   }) async {
     final db = await _dbHelper.database;
 
-    // Build base FTS query
-    var ftsQuery = query.isEmpty
-        ? 'SELECT rowid, * FROM ${DatabaseHelper.tablePrompts}'
-        : 'SELECT p.rowid, p.* FROM ${DatabaseHelper.tablePrompts} p '
-          'INNER JOIN ${DatabaseHelper.tablePrompts}_fts fts ON p.rowid = fts.rowid '
-          'WHERE ${DatabaseHelper.tablePrompts}_fts MATCH ?';
+    // Build base query with LIKE for fuzzy search
+    var sqlQuery = 'SELECT * FROM ${DatabaseHelper.tablePrompts} WHERE 1=1';
+    final List<dynamic> args = [];
 
-    List<dynamic> args = query.isEmpty ? [] : [query];
+    // Add fuzzy search conditions for title and content
+    if (query.isNotEmpty) {
+      final searchPattern = '%$query%';
+      sqlQuery += ' AND (${DatabaseHelper.colTitle} LIKE ? OR ${DatabaseHelper.colContent} LIKE ?)';
+      args.addAll([searchPattern, searchPattern]);
+    }
 
     // Add collection filter
     if (collectionId != null) {
-      final where = query.isEmpty ? 'WHERE' : 'AND';
-      ftsQuery += ' $where ${DatabaseHelper.colCollectionId} = ?';
+      sqlQuery += ' AND ${DatabaseHelper.colCollectionId} = ?';
       args.add(collectionId);
     }
 
-    // Add date range filter
-    if (startDate != null) {
-      final where = query.isEmpty && collectionId == null
-          ? 'WHERE'
-          : (query.isEmpty || collectionId == null) ? 'WHERE' : 'AND';
-      final startMs = startDate.millisecondsSinceEpoch;
-      ftsQuery += ' $where ${DatabaseHelper.colCreatedAt} >= ?';
-      args.add(startMs);
-    }
+    // Order by updated date descending
+    sqlQuery += ' ORDER BY ${DatabaseHelper.colUpdatedAt} DESC';
 
-    if (endDate != null) {
-      final where =
-          (query.isEmpty && collectionId == null && startDate == null)
-              ? 'WHERE'
-              : 'AND';
-      final endMs = endDate.millisecondsSinceEpoch;
-      ftsQuery += ' $where ${DatabaseHelper.colCreatedAt} <= ?';
-      args.add(endMs);
-    }
-
-    // Order by relevance (most used first removed since usageCount is removed)
-    final orderBy = 'rank ASC';
-    ftsQuery += ' ORDER BY $orderBy';
-
-    final List<Map<String, dynamic>> maps =
-        await db.rawQuery(ftsQuery, args);
+    final List<Map<String, dynamic>> maps = await db.rawQuery(sqlQuery, args);
 
     return maps.map((map) => _mapToPrompt(map)).toList();
   }

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:material_symbols_icons/material_symbols_icons.dart';
 import 'package:prompt_memo/features/prompt-management/presentation/providers/collection_providers.dart';
 import 'package:prompt_memo/features/prompt-management/presentation/providers/prompt_providers.dart';
+import 'package:prompt_memo/features/search/data/repositories/search_repository.dart';
 import 'package:prompt_memo/shared/models/collection.dart';
 import 'package:prompt_memo/shared/models/prompt.dart';
 import 'package:prompt_memo/shared/models/result_sample.dart';
@@ -161,6 +162,11 @@ class _CollectionDetailScreenState extends ConsumerState<CollectionDetailScreen>
       appBar: AppBar(
         title: Text(collection.name),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.search),
+            onPressed: () => _showSearchDialog(collection),
+            tooltip: 'Search in collection',
+          ),
           IconButton(
             icon: const Icon(Icons.playlist_add),
             onPressed: () => _showAddPromptDialog(collection),
@@ -531,6 +537,14 @@ class _CollectionDetailScreenState extends ConsumerState<CollectionDetailScreen>
       builder: (ctx) => _AddPromptDialog(collectionId: collection.id),
     );
   }
+
+  void _showSearchDialog(Collection collection) {
+    _logger.info('CollectionDetailScreen: showing search dialog for ${collection.id}');
+    showDialog(
+      context: context,
+      builder: (ctx) => _SearchInCollectionDialog(collectionId: collection.id, collectionName: collection.name),
+    );
+  }
 }
 
 /// Dialog for adding existing prompts to a collection
@@ -668,5 +682,181 @@ class _AddPromptDialogState extends ConsumerState<_AddPromptDialog> {
         setState(() => _isLoading = false);
       }
     }
+  }
+}
+
+/// Dialog for searching prompts within a collection
+class _SearchInCollectionDialog extends ConsumerStatefulWidget {
+  final String collectionId;
+  final String collectionName;
+
+  const _SearchInCollectionDialog({required this.collectionId, required this.collectionName});
+
+  @override
+  ConsumerState<_SearchInCollectionDialog> createState() => _SearchInCollectionDialogState();
+}
+
+class _SearchInCollectionDialogState extends ConsumerState<_SearchInCollectionDialog> {
+  final _searchController = TextEditingController();
+  final _focusNode = FocusNode();
+  List<Prompt> _results = [];
+  bool _isSearching = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _focusNode.requestFocus();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  Future<void> _performSearch(String query) async {
+    if (query.trim().isEmpty) {
+      setState(() {
+        _results = [];
+        _isSearching = false;
+      });
+      return;
+    }
+
+    setState(() => _isSearching = true);
+    _logger.info('_SearchInCollectionDialog: searching for "$query" in collection ${widget.collectionId}');
+
+    try {
+      final repository = SearchRepository();
+      final results = await repository.searchPrompts(
+        query: query,
+        collectionId: widget.collectionId,
+      );
+
+      if (mounted) {
+        setState(() {
+          _results = results;
+          _isSearching = false;
+        });
+        _logger.info('_SearchInCollectionDialog: found ${results.length} results');
+      }
+    } catch (e, s) {
+      _logger.severe('_SearchInCollectionDialog: search failed', e, s);
+      if (mounted) {
+        setState(() => _isSearching = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Search error: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text('Search in "${widget.collectionName}"'),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Search bar
+            TextField(
+              controller: _searchController,
+              focusNode: _focusNode,
+              decoration: InputDecoration(
+                hintText: 'Search prompts...',
+                border: const OutlineInputBorder(),
+                suffixIcon: IconButton(
+                  icon: const Icon(Icons.search),
+                  onPressed: () => _performSearch(_searchController.text),
+                  tooltip: 'Search',
+                ),
+              ),
+              textInputAction: TextInputAction.search,
+              onSubmitted: (value) => _performSearch(value),
+            ),
+            const SizedBox(height: 16),
+            // Results
+            Flexible(
+              child: _isSearching
+                  ? const Center(child: CircularProgressIndicator())
+                  : _searchController.text.isEmpty
+                      ? _buildEmptyState()
+                      : _results.isEmpty
+                          ? _buildEmptyResults()
+                          : _buildResults(),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Close'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return const Center(
+      child: Padding(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.search, size: 48, color: Colors.grey),
+            SizedBox(height: 8),
+            Text('Enter keywords to search'),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyResults() {
+    return const Center(
+      child: Padding(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.search_off, size: 48, color: Colors.grey),
+            SizedBox(height: 8),
+            Text('No results found'),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildResults() {
+    return ListView.builder(
+      shrinkWrap: true,
+      itemCount: _results.length,
+      itemBuilder: (context, index) {
+        final prompt = _results[index];
+        return ListTile(
+          title: Text(prompt.title),
+          subtitle: Text(
+            prompt.content.length > 50
+                ? '${prompt.content.substring(0, 50)}...'
+                : prompt.content,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          onTap: () {
+            _logger.info('_SearchInCollectionDialog: result tapped - ${prompt.id}');
+            Navigator.pop(context);
+            context.push('/prompt/${prompt.id}');
+          },
+        );
+      },
+    );
   }
 }

@@ -1,38 +1,35 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:prompt_memo/shared/models/prompt.dart';
 import 'package:prompt_memo/features/search/data/repositories/search_repository.dart';
+import 'package:prompt_memo/features/prompt-management/presentation/providers/collection_providers.dart';
+import 'package:logging/logging.dart';
+
+final _logger = Logger('SearchScreen');
 
 /// Screen for searching prompts
-class SearchScreen extends StatefulWidget {
+class SearchScreen extends ConsumerStatefulWidget {
   final String? initialQuery;
 
   const SearchScreen({super.key, this.initialQuery});
 
   @override
-  State<SearchScreen> createState() => _SearchScreenState();
+  ConsumerState<SearchScreen> createState() => _SearchScreenState();
 }
 
-class _SearchScreenState extends State<SearchScreen> {
+class _SearchScreenState extends ConsumerState<SearchScreen> {
   final _searchController = TextEditingController();
   final _focusNode = FocusNode();
   List<Prompt> _results = [];
-  List<String> _searchHistory = [];
   bool _isSearching = false;
-  bool _showFilters = false;
-  String? _selectedCollection;
-  DateTime? _startDate;
-  DateTime? _endDate;
-  bool _mostUsedFirst = false;
+  String? _selectedCollectionId;
 
   @override
   void initState() {
     super.initState();
     if (widget.initialQuery != null) {
       _searchController.text = widget.initialQuery!;
-    }
-    _loadSearchHistory();
-    if (widget.initialQuery != null) {
       _performSearch(widget.initialQuery!);
     }
     _focusNode.requestFocus();
@@ -45,14 +42,6 @@ class _SearchScreenState extends State<SearchScreen> {
     super.dispose();
   }
 
-  Future<void> _loadSearchHistory() async {
-    final repository = SearchRepository();
-    final history = await repository.getSearchHistory();
-    if (mounted) {
-      setState(() => _searchHistory = history);
-    }
-  }
-
   Future<void> _performSearch(String query) async {
     if (query.trim().isEmpty) {
       setState(() {
@@ -63,30 +52,24 @@ class _SearchScreenState extends State<SearchScreen> {
     }
 
     setState(() => _isSearching = true);
+    _logger.info('SearchScreen: searching for "$query" in collection $_selectedCollectionId');
 
     try {
       final repository = SearchRepository();
       final results = await repository.searchPrompts(
         query: query,
-        collectionId: _selectedCollection,
-        startDate: _startDate,
-        endDate: _endDate,
-        mostUsedFirst: _mostUsedFirst,
+        collectionId: _selectedCollectionId,
       );
-
-      // Save to history
-      await repository.saveSearchQuery(query);
-
-      // Reload history
-      await _loadSearchHistory();
 
       if (mounted) {
         setState(() {
           _results = results;
           _isSearching = false;
         });
+        _logger.info('SearchScreen: found ${results.length} results');
       }
-    } catch (e) {
+    } catch (e, s) {
+      _logger.severe('SearchScreen: search failed', e, s);
       if (mounted) {
         setState(() => _isSearching = false);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -105,44 +88,27 @@ class _SearchScreenState extends State<SearchScreen> {
       appBar: AppBar(
         title: _buildSearchBar(),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.filter_list),
-            onPressed: () {
-              setState(() => _showFilters = !_showFilters);
-            },
-            tooltip: 'Filters',
-          ),
-          if (_searchController.text.isNotEmpty)
+          if (_selectedCollectionId != null || _searchController.text.isNotEmpty)
             IconButton(
               icon: const Icon(Icons.clear),
               onPressed: () {
                 _searchController.clear();
                 setState(() {
                   _results = [];
-                  _selectedCollection = null;
-                  _startDate = null;
-                  _endDate = null;
-                  _mostUsedFirst = false;
+                  _selectedCollectionId = null;
                 });
               },
               tooltip: 'Clear',
             ),
         ],
       ),
-      body: Column(
-        children: [
-          if (_showFilters) _buildFilters(),
-          Expanded(
-            child: _isSearching
-                  ? const Center(child: CircularProgressIndicator())
-                  : _searchController.text.isEmpty
-                      ? _buildSearchHistory()
-                      : _results.isEmpty
-                          ? _buildEmptyResults()
-                          : _buildResults(),
-          ),
-        ],
-      ),
+      body: _isSearching
+          ? const Center(child: CircularProgressIndicator())
+          : _searchController.text.isEmpty
+              ? _buildEmptyState()
+              : _results.isEmpty
+                  ? _buildEmptyResults()
+                  : _buildResults(),
     );
   }
 
@@ -154,6 +120,23 @@ class _SearchScreenState extends State<SearchScreen> {
         hintText: 'Search prompts...',
         border: InputBorder.none,
         hintStyle: TextStyle(color: Colors.grey.shade500),
+        suffixIcon: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (_selectedCollectionId != null)
+              IconButton(
+                icon: const Icon(Icons.filter_list),
+                onPressed: _showCollectionFilter,
+                tooltip: 'Filter by collection',
+              )
+            else
+              IconButton(
+                icon: const Icon(Icons.search),
+                onPressed: () => _performSearch(_searchController.text),
+                tooltip: 'Search',
+              ),
+          ],
+        ),
       ),
       style: const TextStyle(fontSize: 18),
       textInputAction: TextInputAction.search,
@@ -161,146 +144,27 @@ class _SearchScreenState extends State<SearchScreen> {
     );
   }
 
-  Widget _buildFilters() {
-    return Card(
-      margin: const EdgeInsets.all(8),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Filters',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: _showCollectionFilter,
-                    icon: const Icon(Icons.folder),
-                    label: Text(
-                      _selectedCollection ?? 'All Collections',
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: _showDateRangePicker,
-                    icon: const Icon(Icons.date_range),
-                    label: Text(
-                      _getDateRangeText(),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                FilterChip(
-                  label: const Text('Most Used'),
-                  selected: _mostUsedFirst,
-                  onSelected: (selected) {
-                    setState(() => _mostUsedFirst = selected);
-                    if (_searchController.text.isNotEmpty) {
-                      _performSearch(_searchController.text);
-                    }
-                  },
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              children: [
-                if (_selectedCollection != null)
-                  Chip(
-                    label: Text(_selectedCollection!),
-                    onDeleted: () {
-                      setState(() => _selectedCollection = null);
-                      if (_searchController.text.isNotEmpty) {
-                        _performSearch(_searchController.text);
-                      }
-                    },
-                  ),
-                if (_startDate != null || _endDate != null)
-                  Chip(
-                    label: Text(_getDateRangeText()),
-                    onDeleted: () {
-                      setState(() {
-                        _startDate = null;
-                        _endDate = null;
-                      });
-                      if (_searchController.text.isNotEmpty) {
-                        _performSearch(_searchController.text);
-                      }
-                    },
-                  ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSearchHistory() {
-    if (_searchHistory.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.search, size: 64, color: Colors.grey.shade400),
-            const SizedBox(height: 16),
-            Text(
-              'Search for prompts',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Enter keywords to find prompts by title or content',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Colors.grey.shade600,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-      );
-    }
-
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        Text(
-          'Recent Searches',
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.w600,
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.search, size: 64, color: Colors.grey.shade400),
+          const SizedBox(height: 16),
+          Text(
+            'Search for prompts',
+            style: Theme.of(context).textTheme.titleLarge,
           ),
-        ),
-        const SizedBox(height: 8),
-        ..._searchHistory.map((query) => ListTile(
-              leading: const Icon(Icons.history),
-              title: Text(query),
-              onTap: () {
-                _searchController.text = query;
-                _performSearch(query);
-              },
-              trailing: IconButton(
-                icon: const Icon(Icons.clear, size: 18),
-                onPressed: () async {
-                  final repo = SearchRepository();
-                  await repo.clearSearchHistory();
-                  await _loadSearchHistory();
-                },
-                tooltip: 'Clear History',
-              ),
-            )),
-      ],
+          const SizedBox(height: 8),
+          Text(
+            'Enter keywords to find prompts by title or content',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: Colors.grey.shade600,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
     );
   }
 
@@ -317,7 +181,7 @@ class _SearchScreenState extends State<SearchScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            'Try different keywords or adjust filters',
+            'Try different keywords or clear the collection filter',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
               color: Colors.grey.shade600,
             ),
@@ -342,6 +206,7 @@ class _SearchScreenState extends State<SearchScreen> {
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       child: InkWell(
         onTap: () {
+          _logger.info('SearchScreen: result tapped - ${prompt.id}');
           context.push('/prompt/${prompt.id}');
         },
         child: Padding(
@@ -397,48 +262,54 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   void _showCollectionFilter() {
+    final collectionsAsync = ref.watch(collectionsProvider);
+
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (ctx) => AlertDialog(
         title: const Text('Select Collection'),
-        content: const Text('Collection filter coming soon'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: collectionsAsync.when(
+            data: (collections) {
+              return ListView.builder(
+                shrinkWrap: true,
+                itemCount: collections.length + 1,
+                itemBuilder: (context, index) {
+                  if (index == 0) {
+                    return ListTile(
+                      leading: const Icon(Icons.folder_open),
+                      title: const Text('All Collections'),
+                      onTap: () {
+                        setState(() => _selectedCollectionId = null);
+                        Navigator.pop(ctx);
+                        if (_searchController.text.isNotEmpty) {
+                          _performSearch(_searchController.text);
+                        }
+                      },
+                    );
+                  }
+                  final collection = collections[index - 1];
+                  return ListTile(
+                    leading: const Icon(Icons.folder),
+                    title: Text(collection.name),
+                    onTap: () {
+                      setState(() => _selectedCollectionId = collection.id);
+                      Navigator.pop(ctx);
+                      if (_searchController.text.isNotEmpty) {
+                        _performSearch(_searchController.text);
+                      }
+                    },
+                  );
+                },
+              );
+            },
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (error, stack) => Center(child: Text('Error: $error')),
           ),
-        ],
+        ),
       ),
     );
-  }
-
-  Future<void> _showDateRangePicker() async {
-    final picked = await showDateRangePicker(
-      context: context,
-      firstDate: DateTime(2020),
-      lastDate: DateTime.now(),
-      initialDateRange: _startDate != null && _endDate != null
-          ? DateTimeRange(start: _startDate!, end: _endDate!)
-          : null,
-    );
-
-    if (picked != null) {
-      setState(() {
-        _startDate = picked.start;
-        _endDate = picked.end;
-      });
-      if (_searchController.text.isNotEmpty) {
-        _performSearch(_searchController.text);
-      }
-    }
-  }
-
-  String _getDateRangeText() {
-    if (_startDate == null && _endDate == null) return 'Date Range';
-    if (_startDate != null && _endDate != null) {
-      return '${_formatDateShort(_startDate!)} - ${_formatDateShort(_endDate!)}';
-    }
-    return 'Date Range';
   }
 
   String _formatDate(DateTime date) {
@@ -456,10 +327,6 @@ class _SearchScreenState extends State<SearchScreen> {
     } else if (difference.inDays < 7) {
       return '${difference.inDays}d ago';
     }
-    return '${date.month}/${date.day}/${date.year}';
-  }
-
-  String _formatDateShort(DateTime date) {
     return '${date.month}/${date.day}/${date.year}';
   }
 }
