@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:material_symbols_icons/material_symbols_icons.dart';
 import 'package:prompt_memo/features/prompt-management/presentation/providers/prompt_providers.dart';
 import 'package:prompt_memo/features/prompt-management/presentation/providers/collection_providers.dart';
+import 'package:prompt_memo/features/search/data/repositories/search_repository.dart';
 import 'package:prompt_memo/shared/models/prompt.dart';
 import 'package:prompt_memo/shared/models/collection.dart';
 import 'package:prompt_memo/shared/models/result_sample.dart';
@@ -181,16 +182,9 @@ class _PromptListScreenState extends ConsumerState<PromptListScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.search),
-            onPressed: () async {
-              _logger.info('PromptListScreen: search button pressed - navigating to /search');
-              await context.push('/search');
-              // Refresh list when returning from search screen (data might have changed)
-              if (mounted) {
-                _logger.info('PromptListScreen: returned from search screen - refreshing list');
-                _refreshPromptsAndSamples();
-              } else {
-                _logger.warning('PromptListScreen: returned from search screen but widget not mounted');
-              }
+            onPressed: () {
+              _logger.info('PromptListScreen: search button pressed - showing search dialog');
+              _showSearchDialog();
             },
             tooltip: 'Search',
           ),
@@ -575,5 +569,260 @@ class _PromptListScreenState extends ConsumerState<PromptListScreen> {
     } else {
       return '${date.month}/${date.day}/${date.year}';
     }
+  }
+
+  void _showSearchDialog() {
+    _logger.info('PromptListScreen: showing search dialog');
+    showDialog(
+      context: context,
+      builder: (ctx) => const _SearchDialog(),
+    );
+  }
+}
+
+/// Dialog for searching prompts across all collections
+class _SearchDialog extends ConsumerStatefulWidget {
+  const _SearchDialog();
+
+  @override
+  ConsumerState<_SearchDialog> createState() => _SearchDialogState();
+}
+
+class _SearchDialogState extends ConsumerState<_SearchDialog> {
+  final _searchController = TextEditingController();
+  final _focusNode = FocusNode();
+  List<Prompt> _results = [];
+  bool _isSearching = false;
+  String? _selectedCollectionId;
+
+  @override
+  void initState() {
+    super.initState();
+    _focusNode.requestFocus();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  Future<void> _performSearch(String query) async {
+    if (query.trim().isEmpty) {
+      setState(() {
+        _results = [];
+        _isSearching = false;
+      });
+      return;
+    }
+
+    setState(() => _isSearching = true);
+    _logger.info('_SearchDialog: searching for "$query" in collection $_selectedCollectionId');
+
+    try {
+      final repository = SearchRepository();
+      final results = await repository.searchPrompts(
+        query: query,
+        collectionId: _selectedCollectionId,
+      );
+
+      if (mounted) {
+        setState(() {
+          _results = results;
+          _isSearching = false;
+        });
+        _logger.info('_SearchDialog: found ${results.length} results');
+      }
+    } catch (e, s) {
+      _logger.severe('_SearchDialog: search failed', e, s);
+      if (mounted) {
+        setState(() => _isSearching = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Search error: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Search Prompts'),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Search bar
+            TextField(
+              controller: _searchController,
+              focusNode: _focusNode,
+              decoration: InputDecoration(
+                hintText: 'Search prompts...',
+                border: const OutlineInputBorder(),
+                suffixIcon: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (_selectedCollectionId != null)
+                      IconButton(
+                        icon: const Icon(Icons.filter_list),
+                        onPressed: _showCollectionFilter,
+                        tooltip: 'Filter by collection',
+                      )
+                    else
+                      IconButton(
+                        icon: const Icon(Icons.search),
+                        onPressed: () => _performSearch(_searchController.text),
+                        tooltip: 'Search',
+                      ),
+                  ],
+                ),
+              ),
+              textInputAction: TextInputAction.search,
+              onSubmitted: (value) => _performSearch(value),
+            ),
+            const SizedBox(height: 16),
+            // Results
+            Flexible(
+              child: _isSearching
+                  ? const Center(child: CircularProgressIndicator())
+                  : _searchController.text.isEmpty
+                      ? _buildEmptyState()
+                      : _results.isEmpty
+                          ? _buildEmptyResults()
+                          : _buildResults(),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Close'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return const Center(
+      child: Padding(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.search, size: 48, color: Colors.grey),
+            SizedBox(height: 8),
+            Text('Enter keywords to search'),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyResults() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.search_off, size: 48, color: Colors.grey),
+            const SizedBox(height: 8),
+            const Text('No results found'),
+            if (_selectedCollectionId != null)
+              TextButton(
+                onPressed: () {
+                  setState(() => _selectedCollectionId = null);
+                  if (_searchController.text.isNotEmpty) {
+                    _performSearch(_searchController.text);
+                  }
+                },
+                child: const Text('Clear collection filter'),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildResults() {
+    return ListView.builder(
+      shrinkWrap: true,
+      itemCount: _results.length,
+      itemBuilder: (context, index) {
+        final prompt = _results[index];
+        return ListTile(
+          title: Text(prompt.title),
+          subtitle: Text(
+            prompt.content.length > 50
+                ? '${prompt.content.substring(0, 50)}...'
+                : prompt.content,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          onTap: () {
+            _logger.info('_SearchDialog: result tapped - ${prompt.id}');
+            Navigator.pop(context);
+            context.push('/prompt/${prompt.id}');
+          },
+        );
+      },
+    );
+  }
+
+  void _showCollectionFilter() {
+    final collectionsAsync = ref.watch(collectionsProvider);
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Select Collection'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: collectionsAsync.when(
+            data: (collections) {
+              return ListView.builder(
+                shrinkWrap: true,
+                itemCount: collections.length + 1,
+                itemBuilder: (context, index) {
+                  if (index == 0) {
+                    return ListTile(
+                      leading: const Icon(Icons.folder_open),
+                      title: const Text('All Collections'),
+                      onTap: () {
+                        setState(() => _selectedCollectionId = null);
+                        Navigator.pop(ctx);
+                        if (_searchController.text.isNotEmpty) {
+                          _performSearch(_searchController.text);
+                        }
+                      },
+                    );
+                  }
+                  final collection = collections[index - 1];
+                  return ListTile(
+                    leading: const Icon(Icons.folder),
+                    title: Text(collection.name),
+                    onTap: () {
+                      setState(() => _selectedCollectionId = collection.id);
+                      Navigator.pop(ctx);
+                      if (_searchController.text.isNotEmpty) {
+                        _performSearch(_searchController.text);
+                      }
+                    },
+                  );
+                },
+              );
+            },
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (error, stack) => Center(child: Text('Error: $error')),
+          ),
+        ),
+      ),
+    );
   }
 }
