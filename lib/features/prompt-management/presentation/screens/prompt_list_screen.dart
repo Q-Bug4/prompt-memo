@@ -1,9 +1,11 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:material_symbols_icons/material_symbols_icons.dart';
 import 'package:prompt_memo/features/prompt-management/presentation/providers/prompt_providers.dart';
 import 'package:prompt_memo/shared/models/prompt.dart';
+import 'package:prompt_memo/shared/models/result_sample.dart';
 import 'package:logging/logging.dart';
 
 final _logger = Logger('PromptListScreen');
@@ -17,12 +19,47 @@ class PromptListScreen extends ConsumerStatefulWidget {
 }
 
 class _PromptListScreenState extends ConsumerState<PromptListScreen> {
+  final Map<String, List<ResultSample>> _promptSamples = {};
+  bool _isLoadingSamples = false;
+
   @override
   void initState() {
     super.initState();
     _logger.fine('PromptListScreen: initState');
     // Auto-load prompts when entering screen
-    ref.read(promptListNotifierProvider.notifier).loadPrompts();
+    _refreshPromptsAndSamples();
+  }
+
+  /// Unified method to refresh prompts and samples - use this for all home screen navigation
+  Future<void> _refreshPromptsAndSamples() async {
+    _logger.fine('_refreshPromptsAndSamples called');
+    // Clear samples cache to force reload
+    _promptSamples.clear();
+    // Load prompts
+    await ref.read(promptListNotifierProvider.notifier).loadPrompts();
+  }
+
+  Future<void> _loadAllResultSamples(List<Prompt> prompts) async {
+    if (_isLoadingSamples) return;
+    _isLoadingSamples = true;
+
+    final repository = ref.read(promptRepositoryProvider);
+    final Map<String, List<ResultSample>> samplesMap = {};
+
+    for (final prompt in prompts) {
+      // Skip if already loaded (unless cache was cleared)
+      if (!_promptSamples.containsKey(prompt.id)) {
+        final samples = await repository.getResultSamples(prompt.id);
+        samplesMap[prompt.id] = samples;
+      }
+    }
+
+    if (mounted) {
+      setState(() {
+        _promptSamples.addAll(samplesMap);
+        _isLoadingSamples = false;
+      });
+    }
   }
 
   @override
@@ -30,6 +67,9 @@ class _PromptListScreenState extends ConsumerState<PromptListScreen> {
     _logger.fine('PromptListScreen: build');
     final prompts = ref.watch(promptListNotifierProvider);
     _logger.fine('PromptListScreen: ${prompts.length} prompts loaded');
+
+    // Load result samples for prompts that don't have them yet
+    Future.microtask(() => _loadAllResultSamples(prompts));
 
     return Scaffold(
       appBar: AppBar(
@@ -42,9 +82,7 @@ class _PromptListScreenState extends ConsumerState<PromptListScreen> {
           ),
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: () {
-              ref.read(promptListNotifierProvider.notifier).loadPrompts();
-            },
+            onPressed: _refreshPromptsAndSamples,
             tooltip: 'Refresh',
           ),
           PopupMenuButton<String>(
@@ -71,10 +109,10 @@ class _PromptListScreenState extends ConsumerState<PromptListScreen> {
       floatingActionButton: FloatingActionButton(
         tooltip: 'Create Prompt',
         onPressed: () async {
-          final result = await context.push('/prompt/new');
+          await context.push('/prompt/new');
           // Refresh list when returning from create/edit screen
           if (mounted) {
-            ref.read(promptListNotifierProvider.notifier).loadPrompts();
+            _refreshPromptsAndSamples();
           }
         },
         child: const Icon(Icons.add),
@@ -117,15 +155,93 @@ class _PromptListScreenState extends ConsumerState<PromptListScreen> {
     );
   }
 
+  Widget _buildAttachmentThumbnails(List<ResultSample> samples) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: samples.map((sample) {
+        switch (sample.fileType) {
+          case FileType.text:
+            return _buildTextThumbnail(sample);
+          case FileType.image:
+            return _buildImageThumbnail(sample);
+          case FileType.video:
+            return const SizedBox.shrink(); // Hide video attachments
+        }
+      }).toList(),
+    );
+  }
+
+  Widget _buildTextThumbnail(ResultSample sample) {
+    return FutureBuilder<String>(
+      future: _readFileContent(sample.filePath, 20),
+      builder: (context, snapshot) {
+        final content = snapshot.data ?? '';
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.grey[100],
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.grey[300]!),
+          ),
+          child: Text(
+            content.isEmpty ? '...' : '$content...',
+            style: const TextStyle(fontSize: 12, color: Colors.black87),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildImageThumbnail(ResultSample sample) {
+    return Container(
+      width: 60,
+      height: 60,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey[300]!),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: Image.file(
+          File(sample.filePath),
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) {
+            return Container(
+              color: Colors.grey[200],
+              child: const Icon(Icons.broken_image, size: 24, color: Colors.grey),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Future<String> _readFileContent(String path, int maxChars) async {
+    try {
+      final file = File(path);
+      if (await file.exists()) {
+        final content = await file.readAsString();
+        return content.length > maxChars ? content.substring(0, maxChars) : content;
+      }
+    } catch (e) {
+      _logger.warning('Failed to read file: $path, error: $e');
+    }
+    return '';
+  }
+
   Widget _buildPromptCard(BuildContext ctx, Prompt prompt) {
+    final samples = _promptSamples[prompt.id] ?? [];
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       child: InkWell(
         onTap: () async {
           await ctx.push('/prompt/${prompt.id}');
-          // Refresh list when returning from edit screen
+          // Refresh list when returning from detail/edit screen
           if (mounted) {
-            ref.read(promptListNotifierProvider.notifier).loadPrompts();
+            _refreshPromptsAndSamples();
           }
         },
         child: Padding(
@@ -155,6 +271,10 @@ class _PromptListScreenState extends ConsumerState<PromptListScreen> {
                 maxLines: 3,
                 overflow: TextOverflow.ellipsis,
               ),
+              if (samples.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                _buildAttachmentThumbnails(samples.take(3).toList()),
+              ],
               const SizedBox(height: 12),
               Row(
                 children: [

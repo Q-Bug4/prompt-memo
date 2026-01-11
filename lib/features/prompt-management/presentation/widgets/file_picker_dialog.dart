@@ -67,8 +67,8 @@ class FilePickerDialog extends StatelessWidget {
         }
 
         if (context.mounted) {
+          // Call callback - let the callback handle closing the dialog
           onFileSelected(file);
-          Navigator.pop(context);
         }
       },
       icon: Icon(icon, color: color),
