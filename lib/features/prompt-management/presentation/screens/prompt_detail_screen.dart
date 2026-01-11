@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -295,19 +296,10 @@ Widget _buildResultsSection(
 
 Widget _buildResultCard(BuildContext ctx, ResultSample result) {
   _logger.fine('_buildResultCard called, file = ${result.fileName}');
-  IconData icon = Icons.description;
-  Color color = Colors.blue;
 
-  switch (result.fileType) {
-    case FileType.text:
-      icon = Icons.description;
-      color = Colors.blue;
-    case FileType.image:
-      icon = Icons.image;
-      color = Colors.green;
-    case FileType.video:
-      icon = Icons.videocam;
-      color = Colors.purple;
+  // Don't show video attachments
+  if (result.fileType == FileType.video) {
+    return const SizedBox.shrink();
   }
 
   return Card(
@@ -317,27 +309,103 @@ Widget _buildResultCard(BuildContext ctx, ResultSample result) {
         _openFileViewer(ctx, result);
       },
       child: Container(
-        width: 120,
-        padding: const EdgeInsets.all(12),
+        width: 150,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 32, color: color),
-            const SizedBox(height: 8),
-            Text(
-              result.fileName.length > 20
-                  ? '${result.fileName.substring(0, 20)}...'
-                  : result.fileName,
-              style: const TextStyle(fontSize: 12),
-              textAlign: TextAlign.center,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
+            // Preview area
+            _buildPreview(result),
+            // Filename
+            Padding(
+              padding: const EdgeInsets.all(8),
+              child: Text(
+                result.fileName.length > 20
+                    ? '${result.fileName.substring(0, 20)}...'
+                    : result.fileName,
+                style: const TextStyle(fontSize: 12),
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         ),
       ),
     ),
   );
+}
+
+Widget _buildPreview(ResultSample result) {
+  switch (result.fileType) {
+    case FileType.text:
+      return _buildTextPreview(result);
+    case FileType.image:
+      return _buildImagePreview(result);
+    case FileType.video:
+      return const SizedBox.shrink(); // Should not reach here due to early return
+  }
+}
+
+Widget _buildTextPreview(ResultSample result) {
+  return FutureBuilder<String>(
+    future: _readFileContent(result.filePath, 50),
+    builder: (context, snapshot) {
+      final content = snapshot.data ?? '';
+      return Container(
+        width: 150,
+        height: 100,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.grey[100],
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+        ),
+        child: Center(
+          child: Text(
+            content.isEmpty ? '...' : '$content...',
+            style: const TextStyle(fontSize: 10, color: Colors.black87),
+            maxLines: 5,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
+    },
+  );
+}
+
+Widget _buildImagePreview(ResultSample result) {
+  return Container(
+    width: 150,
+    height: 100,
+    child: ClipRRect(
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+      child: Image.file(
+        File(result.filePath),
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) {
+          return Container(
+            color: Colors.grey[200],
+            child: const Center(
+              child: Icon(Icons.broken_image, size: 32, color: Colors.grey),
+            ),
+          );
+        },
+      ),
+    ),
+  );
+}
+
+Future<String> _readFileContent(String path, int maxChars) async {
+  try {
+    final file = File(path);
+    if (await file.exists()) {
+      final content = await file.readAsString();
+      return content.length > maxChars ? content.substring(0, maxChars) : content;
+    }
+  } catch (e) {
+    _logger.warning('Failed to read file: $path, error = $e');
+  }
+  return '';
 }
 
 Widget _buildErrorCard(BuildContext ctx, Object error) {
