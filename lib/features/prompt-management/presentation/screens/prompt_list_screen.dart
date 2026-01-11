@@ -181,9 +181,16 @@ class _PromptListScreenState extends ConsumerState<PromptListScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.search),
-            onPressed: () {
+            onPressed: () async {
               _logger.info('PromptListScreen: search button pressed - navigating to /search');
-              context.push('/search');
+              await context.push('/search');
+              // Refresh list when returning from search screen (data might have changed)
+              if (mounted) {
+                _logger.info('PromptListScreen: returned from search screen - refreshing list');
+                _refreshPromptsAndSamples();
+              } else {
+                _logger.warning('PromptListScreen: returned from search screen but widget not mounted');
+              }
             },
             tooltip: 'Search',
           ),

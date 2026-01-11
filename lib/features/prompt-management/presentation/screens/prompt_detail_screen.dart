@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:prompt_memo/shared/models/prompt.dart';
 import 'package:prompt_memo/shared/models/result_sample.dart';
 import 'package:prompt_memo/features/prompt-management/presentation/providers/prompt_providers.dart';
+import 'package:prompt_memo/features/prompt-management/presentation/providers/collection_providers.dart';
 import 'package:prompt_memo/features/prompt-management/presentation/widgets/file_picker_dialog.dart';
 import 'package:prompt_memo/features/prompt-management/presentation/widgets/text_file_viewer.dart';
 import 'package:prompt_memo/features/prompt-management/presentation/widgets/image_file_viewer.dart';
@@ -30,9 +31,13 @@ class PromptDetailScreen extends ConsumerWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.edit),
-            onPressed: () {
+            onPressed: () async {
               _logger.info('PromptDetailScreen: edit button pressed - navigating to /prompt/$promptId/edit');
-              context.push('/prompt/$promptId/edit');
+              await context.push('/prompt/$promptId/edit');
+              // Refresh data when returning from edit screen
+              _logger.info('PromptDetailScreen: returned from edit screen - refreshing data');
+              ref.invalidate(promptProvider(promptId));
+              ref.invalidate(resultSamplesProvider(promptId));
             },
             tooltip: 'Edit',
           ),
@@ -79,7 +84,7 @@ class PromptDetailScreen extends ConsumerWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _buildPromptHeader(prompt),
+                          _buildPromptHeader(ctx, prompt),
                           const SizedBox(height: 16),
                           _buildPromptContent(prompt),
                           const SizedBox(height: 24),
@@ -146,8 +151,9 @@ Widget _buildError(BuildContext ctx, Object error) {
   );
 }
 
-Widget _buildPromptHeader(Prompt prompt) {
+Widget _buildPromptHeader(BuildContext context, Prompt prompt) {
   _logger.finest('PromptDetailScreen: building header for: ${prompt.title}');
+
   return Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
@@ -165,12 +171,35 @@ Widget _buildPromptHeader(Prompt prompt) {
         children: [
           _buildChip(Icons.calendar_today, _formatDate(prompt.createdAt)),
           if (prompt.collectionId != null)
-            _buildChip(Icons.folder, 'In Collection'),
+            _CollectionChip(collectionId: prompt.collectionId!),
           ...prompt.tags.map((tag) => _buildChip(Icons.tag, tag)),
         ],
       ),
     ],
   );
+}
+
+/// Widget to display collection name chip
+class _CollectionChip extends ConsumerWidget {
+  final String collectionId;
+
+  const _CollectionChip({required this.collectionId});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final collectionAsync = ref.watch(collectionProvider(collectionId));
+
+    return collectionAsync.when(
+      data: (collection) {
+        if (collection == null) {
+          return _buildChip(Icons.folder, 'Unknown Collection');
+        }
+        return _buildChip(Icons.folder, collection.name);
+      },
+      loading: () => _buildChip(Icons.folder, 'Loading...'),
+      error: (_, __) => _buildChip(Icons.folder, 'Collection'),
+    );
+  }
 }
 
 Widget _buildChip(IconData icon, String label) {

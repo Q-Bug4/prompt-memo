@@ -637,8 +637,15 @@ class _AddPromptDialogState extends ConsumerState<_AddPromptDialog> {
 
       // Invalidate providers to refresh UI
       ref.invalidate(promptsByCollectionProvider(widget.collectionId));
+
+      // Important: Also invalidate the prompt's original collection list (if it was in one)
+      if (prompt.collectionId != null && prompt.collectionId != widget.collectionId) {
+        ref.invalidate(promptsByCollectionProvider(prompt.collectionId!));
+      }
+
       ref.invalidate(collectionListProvider);
       ref.invalidate(promptsProvider);
+      ref.invalidate(promptProvider(prompt.id)); // Invalidate the specific prompt to update its collection info
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
