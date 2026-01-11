@@ -31,10 +31,10 @@ class _CreatePromptScreenState extends ConsumerState<CreatePromptScreen> {
     super.initState();
     _logger.info('initState, promptId = ${widget.promptId}');
     if (widget.promptId != null) {
-      _logger.fine('Creating new prompt');
-    } else {
       _logger.fine('Editing prompt: ${widget.promptId}');
       _loadPrompt();
+    } else {
+      _logger.fine('Creating new prompt');
     }
   }
 
@@ -238,11 +238,13 @@ class _CreatePromptScreenState extends ConsumerState<CreatePromptScreen> {
           ),
         );
         _logger.fine('_savePrompt: invalidating prompt provider');
-        // Invalidate the prompt provider so detail screen refreshes
+        // Invalidate of prompt provider so detail screen refreshes
         ref.invalidate(promptProvider(widget.promptId!));
         _logger.fine('_savePrompt: invalidating prompts provider');
-        // Also invalidate the prompts list to refresh list view
+        // Also invalidate prompts list to refresh list view
         ref.invalidate(promptsProvider);
+        // Reload prompts list
+        ref.read(promptListNotifierProvider.notifier).loadPrompts();
         if (mounted) {
           context.pop();
         }

@@ -18,6 +18,14 @@ class PromptListScreen extends ConsumerStatefulWidget {
 
 class _PromptListScreenState extends ConsumerState<PromptListScreen> {
   @override
+  void initState() {
+    super.initState();
+    _logger.fine('PromptListScreen: initState');
+    // Auto-load prompts when entering screen
+    ref.read(promptListNotifierProvider.notifier).loadPrompts();
+  }
+
+  @override
   Widget build(BuildContext context) {
     _logger.fine('PromptListScreen: build');
     final prompts = ref.watch(promptListNotifierProvider);
@@ -62,7 +70,13 @@ class _PromptListScreenState extends ConsumerState<PromptListScreen> {
           : _buildPromptList(prompts),
       floatingActionButton: FloatingActionButton(
         tooltip: 'Create Prompt',
-        onPressed: () => context.push('/prompt/new'),
+        onPressed: () async {
+          final result = await context.push('/prompt/new');
+          // Refresh list when returning from create/edit screen
+          if (mounted) {
+            ref.read(promptListNotifierProvider.notifier).loadPrompts();
+          }
+        },
         child: const Icon(Icons.add),
       ),
     );
@@ -107,8 +121,12 @@ class _PromptListScreenState extends ConsumerState<PromptListScreen> {
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       child: InkWell(
-        onTap: () {
-          ctx.push('/prompt/${prompt.id}');
+        onTap: () async {
+          await ctx.push('/prompt/${prompt.id}');
+          // Refresh list when returning from edit screen
+          if (mounted) {
+            ref.read(promptListNotifierProvider.notifier).loadPrompts();
+          }
         },
         child: Padding(
           padding: const EdgeInsets.all(16),
