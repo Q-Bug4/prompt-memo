@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:prompt_memo/shared/models/prompt.dart';
 import 'package:prompt_memo/features/prompt-management/presentation/providers/prompt_providers.dart';
+import 'package:prompt_memo/features/prompt-management/presentation/providers/collection_providers.dart';
 import 'package:logging/logging.dart';
 
 final _logger = Logger('CreatePromptScreen');
@@ -10,8 +11,9 @@ final _logger = Logger('CreatePromptScreen');
 /// Screen for creating or editing a prompt
 class CreatePromptScreen extends ConsumerStatefulWidget {
   final String? promptId;
+  final String? initialCollectionId;
 
-  const CreatePromptScreen({super.key, this.promptId});
+  const CreatePromptScreen({super.key, this.promptId, this.initialCollectionId});
 
   @override
   ConsumerState<CreatePromptScreen> createState() => _CreatePromptScreenState();
@@ -31,6 +33,12 @@ class _CreatePromptScreenState extends ConsumerState<CreatePromptScreen> {
     super.initState();
     final mode = widget.promptId != null ? 'Edit' : 'Create';
     _logger.info('CreatePromptScreen: initState - mode: $mode, promptId: ${widget.promptId ?? "new"}');
+
+    // Initialize collectionId from initialCollectionId (for new prompts) or from existing prompt
+    if (widget.promptId == null) {
+      _collectionId = widget.initialCollectionId;
+      _logger.fine('CreatePromptScreen: initial collectionId set to: $_collectionId');
+    }
 
     if (widget.promptId != null) {
       _logger.fine('CreatePromptScreen: editing existing prompt - loading data');
@@ -89,6 +97,9 @@ class _CreatePromptScreenState extends ConsumerState<CreatePromptScreen> {
   Widget build(BuildContext context) {
     _logger.finest('CreatePromptScreen: build - isLoading: $_isLoading, isEditing: ${widget.promptId != null}');
 
+    // Watch collections for dropdown
+    final collectionsAsync = ref.watch(collectionsProvider);
+
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.promptId == null ? 'New Prompt' : 'Edit Prompt'),
@@ -134,19 +145,61 @@ class _CreatePromptScreenState extends ConsumerState<CreatePromptScreen> {
                     },
                   ),
                   const SizedBox(height: 16),
-                  DropdownButtonFormField<String>(
-                    value: _collectionId,
-                    decoration: const InputDecoration(
-                      labelText: 'Collection',
-                      border: OutlineInputBorder(),
-                    ),
-                    items: const [],
-                    onChanged: (value) {
-                      _logger.finest('CreatePromptScreen: collection changed to: $value');
-                      setState(() {
-                        _collectionId = value;
-                      });
+                  collectionsAsync.when(
+                    data: (collections) {
+                      return DropdownButtonFormField<String>(
+                        value: _collectionId,
+                        decoration: const InputDecoration(
+                          labelText: 'Collection',
+                          hintText: 'Optional - add to a collection',
+                          border: OutlineInputBorder(),
+                        ),
+                        items: [
+                          const DropdownMenuItem(
+                            value: null,
+                            child: Text('No Collection'),
+                          ),
+                          ...collections.map((collection) => DropdownMenuItem(
+                                value: collection.id,
+                                child: Text(collection.name),
+                              )),
+                        ],
+                        onChanged: (value) {
+                          _logger.finest('CreatePromptScreen: collection changed to: $value');
+                          setState(() {
+                            _collectionId = value;
+                          });
+                        },
+                      );
                     },
+                    loading: () => DropdownButtonFormField<String>(
+                      value: null,
+                      decoration: const InputDecoration(
+                        labelText: 'Collection',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: const [],
+                      onChanged: null,
+                      disabledHint: const Text('Loading collections...'),
+                    ),
+                    error: (error, stack) => DropdownButtonFormField<String>(
+                      value: _collectionId,
+                      decoration: const InputDecoration(
+                        labelText: 'Collection',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: const [
+                        DropdownMenuItem(
+                          value: null,
+                          child: Text('No Collection'),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        setState(() {
+                          _collectionId = value;
+                        });
+                      },
+                    ),
                   ),
                   const SizedBox(height: 16),
                   Wrap(
@@ -305,6 +358,9 @@ class _CreatePromptScreenState extends ConsumerState<CreatePromptScreen> {
 
         _logger.fine('CreatePromptScreen: invalidating prompts provider');
         ref.invalidate(promptsProvider);
+
+        _logger.fine('CreatePromptScreen: invalidating collections provider');
+        ref.invalidate(collectionListProvider);
 
         _logger.fine('CreatePromptScreen: reloading prompts list');
         await ref.read(promptListNotifierProvider.notifier).loadPrompts();

@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:prompt_memo/features/prompt-management/presentation/screens/prompt_list_screen.dart';
 import 'package:prompt_memo/features/prompt-management/presentation/screens/prompt_detail_screen.dart';
 import 'package:prompt_memo/features/prompt-management/presentation/screens/create_prompt_screen.dart';
+import 'package:prompt_memo/features/prompt-management/presentation/screens/collection_detail_screen.dart';
+import 'package:prompt_memo/features/prompt-management/presentation/screens/create_edit_collection_screen.dart';
 import 'package:prompt_memo/features/search/presentation/screens/search_screen.dart';
 
 /// App routes
@@ -12,6 +14,9 @@ enum AppRoute {
   createPrompt,
   editPrompt,
   search,
+  collectionDetail,
+  createCollection,
+  editCollection,
 }
 
 /// App router configuration
@@ -33,7 +38,10 @@ final routerConfig = GoRouter(
     GoRoute(
       path: '/prompt/new',
       name: AppRoute.createPrompt.name,
-      builder: (context, state) => const CreatePromptScreen(),
+      builder: (context, state) {
+        final collectionId = state.uri.queryParameters['collectionId'];
+        return CreatePromptScreen(initialCollectionId: collectionId);
+      },
     ),
     GoRoute(
       path: '/prompt/:id/edit',
@@ -51,6 +59,27 @@ final routerConfig = GoRouter(
         // Make sure 'new' is not treated as an ID
         if (id == 'new') return const CreatePromptScreen();
         return PromptDetailScreen(key: ObjectKey(id), promptId: id);
+      },
+    ),
+    GoRoute(
+      path: '/collection/new',
+      name: AppRoute.createCollection.name,
+      builder: (context, state) => const CreateEditCollectionScreen(),
+    ),
+    GoRoute(
+      path: '/collection/:id/edit',
+      name: AppRoute.editCollection.name,
+      builder: (context, state) {
+        final id = state.pathParameters['id']!;
+        return CreateEditCollectionScreen(key: ObjectKey(id), collectionId: id);
+      },
+    ),
+    GoRoute(
+      path: '/collection/:id',
+      name: AppRoute.collectionDetail.name,
+      builder: (context, state) {
+        final id = state.pathParameters['id']!;
+        return CollectionDetailScreen(key: ObjectKey(id), collectionId: id);
       },
     ),
   ],

@@ -4,13 +4,27 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:material_symbols_icons/material_symbols_icons.dart';
 import 'package:prompt_memo/features/prompt-management/presentation/providers/prompt_providers.dart';
+import 'package:prompt_memo/features/prompt-management/presentation/providers/collection_providers.dart';
 import 'package:prompt_memo/shared/models/prompt.dart';
+import 'package:prompt_memo/shared/models/collection.dart';
 import 'package:prompt_memo/shared/models/result_sample.dart';
 import 'package:logging/logging.dart';
 
 final _logger = Logger('PromptListScreen');
 
-/// Screen displaying list of all prompts
+/// List item type for mixed collections and prompts
+enum ItemType { collection, prompt }
+
+/// Mixed list item
+class ListItem {
+  final ItemType type;
+  final DateTime updatedAt;
+  final dynamic data;
+
+  ListItem({required this.type, required this.updatedAt, required this.data});
+}
+
+/// Screen displaying list of all prompts and collections
 class PromptListScreen extends ConsumerStatefulWidget {
   const PromptListScreen({super.key});
 
@@ -47,10 +61,14 @@ class _PromptListScreenState extends ConsumerState<PromptListScreen> {
       _promptSamples.clear();
       _logger.finer('PromptListScreen: cleared $cachedSamplesCount cached samples');
 
-      // Load prompts
+      // Load prompts and collections
       _logger.finer('PromptListScreen: loading prompts from repository');
       await ref.read(promptListNotifierProvider.notifier).loadPrompts();
       _logger.finer('PromptListScreen: prompts loaded successfully');
+
+      _logger.finer('PromptListScreen: loading collections');
+      await ref.read(collectionListProvider.notifier).loadCollections();
+      _logger.finer('PromptListScreen: collections loaded successfully');
 
       final duration = DateTime.now().difference(startTime);
       _logger.info('PromptListScreen: _refreshPromptsAndSamples completed in ${duration.inMilliseconds}ms');
@@ -117,9 +135,40 @@ class _PromptListScreenState extends ConsumerState<PromptListScreen> {
     }
   }
 
+  /// Merge collections and prompts into a single sorted list
+  /// Only shows uncategorized prompts (collectionId is null)
+  List<ListItem> _mergeAndSortItems(List<Collection> collections, List<Prompt> prompts) {
+    final items = <ListItem>[];
+
+    for (final collection in collections) {
+      items.add(ListItem(
+        type: ItemType.collection,
+        updatedAt: collection.updatedAt,
+        data: collection,
+      ));
+    }
+
+    for (final prompt in prompts) {
+      // Only show prompts that are not in any collection
+      if (prompt.collectionId == null) {
+        items.add(ListItem(
+          type: ItemType.prompt,
+          updatedAt: prompt.updatedAt,
+          data: prompt,
+        ));
+      }
+    }
+
+    items.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    return items;
+  }
+
   @override
   Widget build(BuildContext context) {
     _logger.finest('PromptListScreen: build - building widget tree');
+
+    // Watch collections and prompts
+    final collectionsAsync = ref.watch(collectionListProvider);
     final prompts = ref.watch(promptListNotifierProvider);
     _logger.finest('PromptListScreen: build - displaying ${prompts.length} prompts');
 
@@ -149,25 +198,23 @@ class _PromptListScreenState extends ConsumerState<PromptListScreen> {
           PopupMenuButton<String>(
             onSelected: (value) {
               _logger.info('PromptListScreen: popup menu selected - value: $value');
-              if (value == 'collections') {
-                _showCollectionsDialog(context);
+              if (value == 'create_collection') {
+                context.push('/collection/new');
               }
             },
             itemBuilder: (ctx) => [
               const PopupMenuItem(
-                value: 'collections',
+                value: 'create_collection',
                 child: ListTile(
-                  leading: Icon(Icons.folder),
-                  title: Text('Collections'),
+                  leading: Icon(Icons.create_new_folder),
+                  title: Text('New Collection'),
                 ),
               ),
             ],
           ),
         ],
       ),
-      body: prompts.isEmpty
-          ? _buildEmptyState()
-          : _buildPromptList(prompts),
+      body: _buildMixedList(collectionsAsync, prompts),
       floatingActionButton: FloatingActionButton(
         tooltip: 'Create Prompt',
         onPressed: () async {
@@ -199,27 +246,16 @@ class _PromptListScreenState extends ConsumerState<PromptListScreen> {
           ),
           SizedBox(height: 16),
           Text(
-            'No prompts yet',
+            'No prompts or collections yet',
             style: TextStyle(fontSize: 18),
           ),
           SizedBox(height: 8),
           Text(
-            'Create your first prompt to get started',
+            'Create your first prompt or collection to get started',
             style: TextStyle(fontSize: 14, color: Colors.grey),
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildPromptList(List<Prompt> prompts) {
-    _logger.finest('PromptListScreen: building prompt list with ${prompts.length} items');
-    return ListView.builder(
-      itemCount: prompts.length,
-      itemBuilder: (ctx, index) {
-        final prompt = prompts[index];
-        return _buildPromptCard(ctx, prompt);
-      },
     );
   }
 
@@ -419,22 +455,96 @@ class _PromptListScreenState extends ConsumerState<PromptListScreen> {
     );
   }
 
-  void _showCollectionsDialog(BuildContext context) {
-    _logger.info('PromptListScreen: showing collections dialog');
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Collections'),
-        content: const Text('Collections feature coming soon'),
-        actions: [
-          TextButton(
-            onPressed: () {
-              _logger.fine('PromptListScreen: collections dialog closed');
-              Navigator.pop(ctx);
-            },
-            child: const Text('Close'),
+  Widget _buildMixedList(List<Collection> collections, List<Prompt> prompts) {
+    _logger.finest('PromptListScreen: building mixed list - ${collections.length} collections, ${prompts.length} prompts');
+
+    final items = _mergeAndSortItems(collections, prompts);
+
+    if (items.isEmpty) {
+      return _buildEmptyState();
+    }
+
+    return ListView.builder(
+      itemCount: items.length,
+      itemBuilder: (ctx, index) {
+        final item = items[index];
+        if (item.type == ItemType.collection) {
+          return _buildCollectionCard(item.data as Collection);
+        } else {
+          return _buildPromptCard(ctx, item.data as Prompt);
+        }
+      },
+    );
+  }
+
+  Widget _buildCollectionCard(Collection collection) {
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      color: Colors.blue.shade50,
+      child: InkWell(
+        onTap: () async {
+          _logger.info('PromptListScreen: collection card tapped - ${collection.id}');
+          await context.push('/collection/${collection.id}');
+          // Refresh list when returning from collection screen
+          if (mounted) {
+            _logger.info('PromptListScreen: returned from collection screen - refreshing list');
+            _refreshPromptsAndSamples();
+          }
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Icon(Icons.folder, size: 40, color: Colors.blue.shade700),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      collection.name,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    if (collection.description.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        collection.description,
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey[700],
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Icon(Icons.note, size: 14, color: Colors.grey[600]),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Collection',
+                          style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                        ),
+                        const Spacer(),
+                        Icon(Icons.access_time, size: 14, color: Colors.grey),
+                        const SizedBox(width: 4),
+                        Text(
+                          _formatDate(collection.updatedAt),
+                          style: const TextStyle(fontSize: 12, color: Colors.grey),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right, color: Colors.grey[400]),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
