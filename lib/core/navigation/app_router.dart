@@ -6,6 +6,10 @@ import 'package:prompt_memo/features/prompt-management/presentation/screens/crea
 import 'package:prompt_memo/features/prompt-management/presentation/screens/collection_detail_screen.dart';
 import 'package:prompt_memo/features/prompt-management/presentation/screens/create_edit_collection_screen.dart';
 import 'package:prompt_memo/features/search/presentation/screens/search_screen.dart';
+import 'package:prompt_memo/features/settings/presentation/screens/settings_screen.dart';
+import 'package:prompt_memo/features/settings/presentation/screens/about_screen.dart';
+import 'package:prompt_memo/features/settings/presentation/screens/update_screen.dart';
+import 'package:prompt_memo/features/settings/presentation/screens/data_management_screen.dart';
 
 /// App routes
 enum AppRoute {
@@ -17,6 +21,10 @@ enum AppRoute {
   collectionDetail,
   createCollection,
   editCollection,
+  settings,
+  about,
+  update,
+  dataManagement,
 }
 
 /// App router configuration
@@ -82,10 +90,28 @@ final routerConfig = GoRouter(
         return CollectionDetailScreen(key: ObjectKey(id), collectionId: id);
       },
     ),
-  ],
-  errorBuilder: (context, state) => Scaffold(
-    body: Center(
-      child: Text('Page not found: ${state.uri}'),
+    GoRoute(
+      path: '/settings',
+      name: AppRoute.settings.name,
+      builder: (context, state) => const SettingsScreen(),
     ),
-  ),
+    GoRoute(
+      path: '/settings/about',
+      name: AppRoute.about.name,
+      builder: (context, state) => const AboutScreen(),
+    ),
+    GoRoute(
+      path: '/settings/update',
+      name: AppRoute.update.name,
+      builder: (context, state) => const UpdateScreen(),
+    ),
+    GoRoute(
+      path: '/settings/data',
+      name: AppRoute.dataManagement.name,
+      builder: (context, state) => const DataManagementScreen(),
+    ),
+  ],
+  errorBuilder:
+      (context, state) =>
+          Scaffold(body: Center(child: Text('Page not found: ${state.uri}'))),
 );

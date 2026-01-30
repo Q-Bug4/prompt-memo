@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:logging/logging.dart';
 import 'core/navigation/app_router.dart';
 import 'core/service_locator.dart';
+import 'package:prompt_memo/features/settings/presentation/providers/settings_providers.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -13,9 +14,14 @@ void main() async {
   // Initialize service locator
   await initServiceLocator();
 
+  // Initialize settings provider to load saved preferences
+  final container = ProviderContainer();
+  container.read(settingsProvider.notifier);
+
   runApp(
-    const ProviderScope(
-      child: PromptMemoApp(),
+    UncontrolledProviderScope(
+      container: container,
+      child: const PromptMemoApp(),
     ),
   );
 }
@@ -60,11 +66,13 @@ void _printLog(LogRecord record) {
   print(buffer.toString());
 }
 
-class PromptMemoApp extends StatelessWidget {
+class PromptMemoApp extends ConsumerWidget {
   const PromptMemoApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(settingsProvider);
+
     return MaterialApp.router(
       title: 'Prompt Memo',
       debugShowCheckedModeBanner: false,
@@ -74,9 +82,7 @@ class PromptMemoApp extends StatelessWidget {
           brightness: Brightness.light,
         ),
         useMaterial3: true,
-        cardTheme: const CardTheme(
-          elevation: 2,
-        ),
+        cardTheme: const CardTheme(elevation: 2),
       ),
       darkTheme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
@@ -84,12 +90,21 @@ class PromptMemoApp extends StatelessWidget {
           brightness: Brightness.dark,
         ),
         useMaterial3: true,
-        cardTheme: const CardTheme(
-          elevation: 2,
-        ),
+        cardTheme: const CardTheme(elevation: 2),
       ),
-      themeMode: ThemeMode.system,
+      themeMode: _convertAppThemeMode(settings.themeMode),
       routerConfig: routerConfig,
     );
+  }
+
+  ThemeMode _convertAppThemeMode(AppThemeMode mode) {
+    switch (mode) {
+      case AppThemeMode.system:
+        return ThemeMode.system;
+      case AppThemeMode.light:
+        return ThemeMode.light;
+      case AppThemeMode.dark:
+        return ThemeMode.dark;
+    }
   }
 }
