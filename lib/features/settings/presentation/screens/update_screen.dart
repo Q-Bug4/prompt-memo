@@ -375,6 +375,16 @@ class _UpdateScreenState extends State<UpdateScreen> {
         const SizedBox(height: 24),
         Text('Recent Updates', style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 12),
+        _buildVersionCard('1.1.0', 'Feb 01, 2025', [
+          'Added Settings feature with theme switching',
+          'Added data export and import functionality',
+          'Added cache management',
+          'Added version update checker',
+          'Added About page with GitHub links',
+          'Added data management dashboard',
+          'Bug fixes and performance improvements',
+        ]),
+        const SizedBox(height: 8),
         _buildVersionCard('0.2.0', 'Dec 15, 2024', [
           'Added collection support',
           'Improved search functionality',

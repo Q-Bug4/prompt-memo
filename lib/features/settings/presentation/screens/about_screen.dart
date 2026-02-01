@@ -109,8 +109,9 @@ class _AboutScreenState extends State<AboutScreen> {
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Text(
-          'Prompt Memo is a simple and efficient prompt management application. '
-          'Organize your AI prompts, create collections, and keep track of your prompt library with ease.',
+          'Prompt Memo v1.1.0 - A simple and efficient prompt management application. '
+          'Organize your AI prompts, create collections, and keep track of your prompt library with ease. '
+          'New in v1.1.0: Settings, theme switching, data export/import, cache management, and more!',
           style: TextStyle(fontSize: 14, color: Colors.grey[700], height: 1.5),
           textAlign: TextAlign.justify,
         ),
