@@ -253,9 +253,6 @@ class _DataManagementScreenState extends ConsumerState<DataManagementScreen> {
           const SizedBox(height: 8),
           _buildStorageInfoCard(),
           const SizedBox(height: 24),
-          _buildSectionHeader('Backup'),
-          _buildAutoBackupCard(settings),
-          const SizedBox(height: 24),
           _buildDangerZone(),
         ],
       ),
@@ -465,18 +462,6 @@ class _DataManagementScreenState extends ConsumerState<DataManagementScreen> {
           _showStorageInfoDialog();
         },
       ),
-    );
-  }
-
-  Widget _buildAutoBackupCard(SettingsState settings) {
-    return SwitchListTile(
-      secondary: const Icon(Icons.backup),
-      title: const Text('Auto Backup'),
-      subtitle: const Text('Automatically backup data daily'),
-      value: settings.autoSave,
-      onChanged: (value) {
-        ref.read(settingsProvider.notifier).setAutoSave(value);
-      },
     );
   }
 

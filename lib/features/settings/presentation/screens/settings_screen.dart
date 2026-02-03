@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -7,62 +6,34 @@ import 'package:prompt_memo/features/settings/presentation/screens/about_screen.
 import 'package:prompt_memo/features/settings/presentation/screens/data_management_screen.dart';
 import 'package:prompt_memo/features/settings/presentation/screens/update_screen.dart';
 import 'package:prompt_memo/features/settings/presentation/providers/settings_providers.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:package_info_plus/package_info_plus.dart';
+import 'package:prompt_memo/core/config/app_info.dart';
 
-class SettingsScreen extends ConsumerStatefulWidget {
+class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
 
   @override
-  ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
-}
-
-class _SettingsScreenState extends ConsumerState<SettingsScreen> {
-  String _appVersion = '';
-
-  @override
-  void initState() {
-    super.initState();
-    _loadAppVersion();
-  }
-
-  Future<void> _loadAppVersion() async {
-    final packageInfo = await PackageInfo.fromPlatform();
-    if (mounted) {
-      setState(() {
-        _appVersion = packageInfo.version;
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final settings = ref.watch(settingsProvider);
-
+  Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
       body: ListView(
         children: [
-          _buildSectionHeader('Appearance'),
-          _buildThemeTile(settings),
-          _buildThumbnailsTile(settings),
-          _buildSectionHeader('Preferences'),
-          _buildAutoSaveTile(settings),
-          _buildSectionHeader('Data'),
+          _buildSectionHeader(context, 'Appearance'),
+          _buildThemeTile(context, ref),
+          _buildSectionHeader(context, 'Data'),
           ListTile(
             leading: const Icon(Icons.storage),
             title: const Text('Data Management'),
-            subtitle: Text('Cache size: ${_formatBytes(settings.cacheSize)}'),
+            subtitle: _buildCacheSize(ref),
             trailing: const Icon(Icons.chevron_right),
             onTap: () {
               context.push('/settings/data');
             },
           ),
-          _buildSectionHeader('About'),
+          _buildSectionHeader(context, 'About'),
           ListTile(
             leading: const Icon(Icons.info),
             title: const Text('About'),
-            subtitle: Text('Version $_appVersion'),
+            subtitle: Text('Version ${AppInfo.appVersion}'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () {
               context.push('/settings/about');
@@ -77,13 +48,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               context.push('/settings/update');
             },
           ),
-          _buildFooter(),
+          _buildFooter(context),
         ],
       ),
     );
   }
 
-  Widget _buildSectionHeader(String title) {
+  Widget _buildSectionHeader(BuildContext context, String title) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
       child: Text(
@@ -97,43 +68,27 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
-  Widget _buildThemeTile(SettingsState settings) {
+  Widget _buildThemeTile(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(settingsProvider);
+    final currentModeLabel = _getThemeLabel(settings.themeMode);
+
     return ListTile(
       leading: const Icon(Icons.brightness_6),
       title: const Text('Theme'),
-      subtitle: Text(_getThemeLabel(settings.themeMode)),
+      subtitle: Text(currentModeLabel),
       trailing: const Icon(Icons.chevron_right),
       onTap: () {
-        _showThemeDialog(settings.themeMode);
+        _showThemeDialog(context, ref, settings.themeMode);
       },
     );
   }
 
-  Widget _buildThumbnailsTile(SettingsState settings) {
-    return SwitchListTile(
-      secondary: const Icon(Icons.image),
-      title: const Text('Show Thumbnails'),
-      subtitle: const Text('Display image thumbnails in list'),
-      value: settings.showThumbnails,
-      onChanged: (value) {
-        ref.read(settingsProvider.notifier).setShowThumbnails(value);
-      },
-    );
+  Widget _buildCacheSize(WidgetRef ref) {
+    final settings = ref.watch(settingsProvider);
+    return Text('Cache size: ${_formatBytes(settings.cacheSize)}');
   }
 
-  Widget _buildAutoSaveTile(SettingsState settings) {
-    return SwitchListTile(
-      secondary: const Icon(Icons.save),
-      title: const Text('Auto Save'),
-      subtitle: const Text('Automatically save changes'),
-      value: settings.autoSave,
-      onChanged: (value) {
-        ref.read(settingsProvider.notifier).setAutoSave(value);
-      },
-    );
-  }
-
-  Widget _buildFooter() {
+  Widget _buildFooter(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -141,7 +96,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           const Divider(),
           const SizedBox(height: 8),
           Text(
-            'Prompt Memo',
+            AppInfo.appName,
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.bold,
@@ -150,12 +105,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ),
           const SizedBox(height: 4),
           Text(
-            'A simple prompt management app',
+            AppInfo.appDescription,
             style: TextStyle(fontSize: 12, color: Colors.grey[500]),
           ),
           const SizedBox(height: 16),
           Text(
-            'Made with ❤️',
+            'Made with ❤',
             style: TextStyle(fontSize: 12, color: Colors.grey[500]),
           ),
         ],
@@ -163,9 +118,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
-  void _showThemeDialog(AppThemeMode currentMode) {
+  void _showThemeDialog(
+    BuildContext ctx,
+    WidgetRef ref,
+    AppThemeMode currentMode,
+  ) {
     showDialog(
-      context: context,
+      context: ctx,
       builder:
           (context) => AlertDialog(
             title: const Text('Select Theme'),
@@ -205,7 +164,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   String _formatBytes(int bytes) {
     if (bytes < 1024) return '$bytes B';
-    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    if (bytes < 1024 * 1024) {
+      return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    }
     return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
   }
 }

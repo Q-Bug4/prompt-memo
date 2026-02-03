@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:material_symbols_icons/material_symbols_icons.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:prompt_memo/core/config/app_info.dart';
 
 class AboutScreen extends StatefulWidget {
   const AboutScreen({super.key});
@@ -27,8 +28,8 @@ class _AboutScreenState extends State<AboutScreen> {
     if (mounted) {
       setState(() {
         _appName = info.appName;
-        _appVersion = info.version;
-        _appBuildNumber = info.buildNumber;
+        _appVersion = AppInfo.appVersion;
+        _appBuildNumber = AppInfo.appBuildNumber;
         _packageName = info.packageName;
       });
     }
@@ -58,11 +59,8 @@ class _AboutScreenState extends State<AboutScreen> {
             ]),
             const SizedBox(height: 24),
             _buildInfoSection('Developer', [
-              _buildInfoTile('Developer', 'Prompt Memo Team'),
-              _buildInfoTile(
-                'Website',
-                'https://github.com/yourusername/prompt-memo',
-              ),
+              _buildInfoTile('Developer', AppInfo.developerName),
+              _buildInfoTile('Website', AppInfo.websiteUrl),
             ]),
             const SizedBox(height: 24),
             _buildInfoSection('License', [_buildLicenseTile()]),
@@ -88,7 +86,7 @@ class _AboutScreenState extends State<AboutScreen> {
 
   Widget _buildAppName() {
     return Text(
-      'Prompt Memo',
+      AppInfo.appName,
       style: TextStyle(
         fontSize: 28,
         fontWeight: FontWeight.bold,
@@ -109,9 +107,7 @@ class _AboutScreenState extends State<AboutScreen> {
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Text(
-          'Prompt Memo v1.1.0 - A simple and efficient prompt management application. '
-          'Organize your AI prompts, create collections, and keep track of your prompt library with ease. '
-          'New in v1.1.0: Settings, theme switching, data export/import, cache management, and more!',
+          'Prompt Memo v${AppInfo.appVersion} - ${AppInfo.appDescription}',
           style: TextStyle(fontSize: 14, color: Colors.grey[700], height: 1.5),
           textAlign: TextAlign.justify,
         ),
@@ -161,7 +157,7 @@ class _AboutScreenState extends State<AboutScreen> {
 
   Widget _buildLicenseTile() {
     return ExpansionTile(
-      title: const Text('MIT License'),
+      title: Text(AppInfo.licenseType),
       leading: const Icon(Icons.description),
       children: [
         Padding(
@@ -211,20 +207,16 @@ SOFTWARE.''',
               ),
             ),
             const SizedBox(height: 12),
-            _buildLinkTile(
-              Icons.code,
-              'GitHub Repository',
-              'https://github.com/Q-Bug4/prompt-memo',
-            ),
+            _buildLinkTile(Icons.code, 'GitHub Repository', AppInfo.githubUrl),
             _buildLinkTile(
               Icons.bug_report,
               'Report Issues',
-              'https://github.com/Q-Bug4/prompt-memo/issues',
+              AppInfo.githubIssuesUrl,
             ),
             _buildLinkTile(
               Icons.description,
               'Documentation',
-              'https://github.com/Q-Bug4/prompt-memo/wiki',
+              AppInfo.githubWikiUrl,
             ),
           ],
         ),

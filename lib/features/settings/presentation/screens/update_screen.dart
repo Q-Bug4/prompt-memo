@@ -4,6 +4,7 @@ import 'package:material_symbols_icons/material_symbols_icons.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:dio/dio.dart';
 import 'package:logging/logging.dart';
+import 'package:prompt_memo/core/config/app_info.dart';
 
 final _logger = Logger('UpdateScreen');
 
@@ -31,10 +32,9 @@ class _UpdateScreenState extends State<UpdateScreen> {
   }
 
   Future<void> _loadCurrentVersion() async {
-    final info = await PackageInfo.fromPlatform();
     if (mounted) {
       setState(() {
-        _currentVersion = info.version;
+        _currentVersion = AppInfo.appVersion;
       });
     }
   }
@@ -46,11 +46,9 @@ class _UpdateScreenState extends State<UpdateScreen> {
     });
 
     try {
-      _logger.info('Checking for updates');
+      _logger.info('Checking for updates from ${AppInfo.githubReleasesUrl}');
       final dio = Dio();
-      final response = await dio.get(
-        'https://api.github.com/repos/Q-Bug4/prompt-memo/releases/latest',
-      );
+      final response = await dio.get(AppInfo.githubReleasesUrl);
 
       if (response.statusCode == 200) {
         final data = response.data;
@@ -375,7 +373,7 @@ class _UpdateScreenState extends State<UpdateScreen> {
         const SizedBox(height: 24),
         Text('Recent Updates', style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 12),
-        _buildVersionCard('1.1.0', 'Feb 01, 2025', [
+        _buildVersionCard('1.1.0', 'Feb 03, 2025', [
           'Added Settings feature with theme switching',
           'Added data export and import functionality',
           'Added cache management',
