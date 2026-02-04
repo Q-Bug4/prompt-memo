@@ -132,50 +132,21 @@ class DatabaseHelper {
         $colQuery TEXT NOT NULL,
         $colSearchedAt INTEGER NOT NULL
       )
-    ''');
-
-    // Create FTS virtual table for full-text search
-    await db.execute('''
-      CREATE VIRTUAL TABLE ${tablePrompts}_fts USING fts5(
-        $colTitle, $colContent,
-        content='$tablePrompts',
-        content_rowid=rowid
-      )
-    ''');
-
-    // Create triggers for FTS
-    await db.execute('''
-      CREATE TRIGGER ${tablePrompts}_ai AFTER INSERT ON $tablePrompts BEGIN
-        INSERT INTO ${tablePrompts}_fts(rowid, $colTitle, $colContent)
-        VALUES (new.rowid, new.$colTitle, new.$colContent);
-      END
-    ''');
-
-    await db.execute('''
-      CREATE TRIGGER ${tablePrompts}_ad AFTER DELETE ON $tablePrompts BEGIN
-        DELETE FROM ${tablePrompts}_fts WHERE rowid = old.rowid;
-      END
-    ''');
-
-    await db.execute('''
-      CREATE TRIGGER ${tablePrompts}_au AFTER UPDATE ON $tablePrompts BEGIN
-        DELETE FROM ${tablePrompts}_fts WHERE rowid = old.rowid;
-        INSERT INTO ${tablePrompts}_fts(rowid, $colTitle, $colContent)
-        VALUES (new.rowid, new.$colTitle, new.$colContent);
-      END
-    ''');
+     ''');
 
     // Create indexes for performance
     await db.execute(
-      'CREATE INDEX idx_prompts_collection ON $tablePrompts($colCollectionId)');
+      'CREATE INDEX idx_prompts_collection ON $tablePrompts($colCollectionId)',
+    );
     await db.execute(
-      'CREATE INDEX idx_result_samples_prompt ON $tableResultSamples($colPromptId)');
+      'CREATE INDEX idx_result_samples_prompt ON $tableResultSamples($colPromptId)',
+    );
     await db.execute(
-      'CREATE INDEX idx_search_history_query ON $tableSearchHistory($colQuery)');
+      'CREATE INDEX idx_search_history_query ON $tableSearchHistory($colQuery)',
+    );
   }
 
-  Future<void> _onUpgrade(
-      Database db, int oldVersion, int newVersion) async {
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     // Migration from version 1 to 2
     if (oldVersion < 2) {
       // Add tags column
@@ -215,7 +186,12 @@ class DatabaseHelper {
     List<Object?>? whereArgs,
   }) async {
     final db = await database;
-    return await db.update(tableName, values, where: where, whereArgs: whereArgs);
+    return await db.update(
+      tableName,
+      values,
+      where: where,
+      whereArgs: whereArgs,
+    );
   }
 
   /// Query data from a table
@@ -226,7 +202,12 @@ class DatabaseHelper {
     String? orderBy,
   }) async {
     final db = await database;
-    return await db.query(tableName, where: where, whereArgs: whereArgs, orderBy: orderBy);
+    return await db.query(
+      tableName,
+      where: where,
+      whereArgs: whereArgs,
+      orderBy: orderBy,
+    );
   }
 
   /// Delete data from a table

@@ -151,6 +151,7 @@
 - `dio: ^5.7.0` - HTTP请求检查更新
 - `file_picker: ^8.0.6` - 选择文件和目录
 - `path: ^1.9.0` - 路径处理
+- `sqflite_android: ^2.3.0` - Android SQLite 支持（修复 Android 平台 ft5 错误）
 
 ### 缓存计算逻辑
 ```
@@ -182,6 +183,10 @@
 4. **文件引用**: 导入时只导入存在的文件，引用不存在的文件会显示警告
 5. **数据删除**: 删除所有数据是危险操作，需要二次确认
 6. **缓存清理**: 缓存清理只删除results目录中的文件，不删除目录结构
+7. **Android SQLite**: 已添加 `sqflite_android: ^2.3.0` 依赖，修复 Android 平台的 "such module : ft5" 错误
+   - Android 平台使用 `sqflite_android` 包
+   - 其他平台（iOS/Linux/Windows/macOS）使用 `sqflite` 和 `sqflite_common_ffi` 包
+   - 同时添加了 `path_provider_android: ^2.1.3` 作为 Android 平台特定的 path_provider 实现
 
 ## 测试建议
 
