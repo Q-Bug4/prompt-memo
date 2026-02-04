@@ -16,6 +16,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
@@ -41,6 +43,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
@@ -63,8 +67,8 @@ jobs:
           # Copy all build files
           Copy-Item -Path "build/windows/x64/runner/Release/*" -Destination "release/prompt_memo_windows/" -Recurse
 
-          # Note: sqflite_common_ffi usually includes sqlite3.dll automatically
-          # But we verify it exists in the output
+          # Note: sqlite_common_ffi usually includes sqlite3.dll automatically
+          # But we verify it exists in output
 
           # Create zip archive
           Compress-Archive -Path "release/prompt_memo_windows/*" -DestinationPath "release/prompt_memo_windows.zip"
@@ -81,6 +85,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
@@ -183,8 +189,81 @@ jobs:
       contents: write
     if: startsWith(github.ref, 'refs/tags/')
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
+
+      - name: Generate Release Notes
+        id: generate_release_notes
+        run: |
+          # Get the current tag
+          CURRENT_TAG="${GITHUB_REF#refs/tags/}"
+
+          # Get the previous tag
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 "$CURRENT_TAG^" 2>/dev/null || echo "")
+
+          if [ -z "$PREVIOUS_TAG" ]; then
+            echo "This is the first release"
+            RANGE="$CURRENT_TAG"
+          else
+            RANGE="$PREVIOUS_TAG..$CURRENT_TAG"
+            echo "Generating notes for commits from $PREVIOUS_TAG to $CURRENT_TAG"
+          fi
+
+          # Get commits since previous tag
+          if [ -z "$PREVIOUS_TAG" ]; then
+            COMMITS=$(git log --pretty=format:"- %s" "$CURRENT_TAG" --no-merges)
+          else
+            COMMITS=$(git log --pretty=format:"- %s" "$RANGE" --no-merges)
+          fi
+
+          # Get the tag message (annotation)
+          TAG_MESSAGE=$(git tag -l --format='%(contents:subject)' "$CURRENT_TAG")
+
+          # Generate release notes
+          cat > release_notes.md << EOF
+          ## Prompt Memo $CURRENT_TAG
+
+          ### 📝 Tag Message
+          $TAG_MESSAGE
+
+          ### 📦 What's Changed
+
+          EOF
+
+          # Add commits to release notes
+          if [ -n "$COMMITS" ]; then
+            echo "$COMMITS" >> release_notes.md
+          else
+            echo "- Initial release" >> release_notes.md
+          fi
+
+          # Add footer
+          cat >> release_notes.md << EOF
+
+          ### 📦 Download
+
+          #### Android (.apk)
+          - 直接下载并安装，无需额外依赖
+
+          #### Windows (.zip)
+          - 解压后运行 `prompt_memo.exe`
+          - 如遇缺少 DLL 错误，请安装 [VC++ Redistributable](https://aka.ms/vs/17/release/vc_redist.x64.exe)
+
+          #### Linux (.tar.gz)
+          - 解压后运行 `./run.sh`
+          - 详细说明见 `README_LINUX.md`
+
+          ---
+          *Full Changelog: https://github.com/Q-Bug4/prompt-memo/commits/$CURRENT_TAG*
+          EOF
+
+          # Save to file for next step
+          cat release_notes.md
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
@@ -193,25 +272,6 @@ jobs:
             android-apk/app-release.apk
             windows-exe/prompt_memo_windows.zip
             linux-bundle/prompt_memo_linux.tar.gz
-          body: |
-            ## Prompt Memo v${{ github.ref_name }}
-
-            ### 📦 下载说明
-
-            #### Android (.apk)
-            - 直接下载并安装，无需额外依赖
-
-            #### Windows (.zip)
-            - 解压后运行 `prompt_memo.exe`
-            - 如遇缺少 DLL 错误，请安装 [VC++ Redistributable](https://aka.ms/vs/17/release/vc_redist.x64.exe)
-
-            #### Linux (.tar.gz)
-            - 解压后运行 `./run.sh`
-            - 详细说明见 `README_LINUX.md`
-
-            ### ✨ 更新内容
-            - Bug fixes and improvements
-            - Enhanced features
-            - Performance optimizations
+          body_file: release_notes.md
           draft: false
           prerelease: false
