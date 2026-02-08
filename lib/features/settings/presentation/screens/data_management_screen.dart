@@ -3,12 +3,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:prompt_memo/features/settings/presentation/providers/settings_providers.dart';
 import 'package:prompt_memo/features/settings/domain/services/data_export_service.dart';
 import 'package:prompt_memo/features/settings/domain/services/cache_service.dart';
 import 'package:prompt_memo/features/prompt-management/presentation/providers/prompt_providers.dart';
 import 'package:prompt_memo/features/prompt-management/presentation/providers/collection_providers.dart';
 import 'package:logging/logging.dart';
+
+typedef DataManagementScreenCallback = void Function();
 
 class DataManagementScreen extends ConsumerStatefulWidget {
   const DataManagementScreen({super.key});
@@ -25,7 +28,6 @@ class _DataManagementScreenState extends ConsumerState<DataManagementScreen> {
   String _lastExportDate = '';
   String _lastImportDate = '';
   final _logger = Logger('DataManagementScreen');
-  final _exportService = DataExportService();
   final _cacheService = CacheService();
 
   @override
@@ -53,21 +55,62 @@ class _DataManagementScreenState extends ConsumerState<DataManagementScreen> {
       _isExporting = true;
     });
 
-    try {
-      _logger.info('Starting data export');
-      final directory = await FilePicker.platform.getDirectoryPath();
-      if (directory == null) {
-        _logger.info('Export cancelled - no directory selected');
-        setState(() {
-          _isExporting = false;
-        });
+    print('=== START EXPORT DATA ===');
+    _logger.info('Starting data export with attachments');
+
+    // Request storage permission on Android
+    if (Platform.isAndroid) {
+      print('Checking Android permissions...');
+      final status = await Permission.storage.request();
+      final manageStatus = await Permission.manageExternalStorage.request();
+
+      print('Storage permission: ${status.isGranted}');
+      print('Manage external storage: ${manageStatus.isGranted}');
+
+      if (!status.isGranted && !manageStatus.isGranted) {
+        print('Storage permission denied');
+        if (mounted) {
+          setState(() {
+            _isExporting = false;
+          });
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Storage permission is required to export data'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
         return;
       }
+    }
 
+    try {
+      print('Getting repositories...');
       final promptRepo = ref.read(promptRepositoryProvider);
       final collectionRepo = ref.read(collectionRepositoryProvider);
 
-      await _exportService.exportToFile(directory, promptRepo, collectionRepo);
+      print('Creating DataExportService...');
+      final exportService = DataExportService();
+
+      print('Calling exportWithData...');
+      final exportResult = await exportService.exportWithData(
+        promptRepo,
+        collectionRepo,
+      );
+
+      print('Getting export directory...');
+      final exportDir = await exportService.getExportDirectory();
+      print('Export directory: $exportDir');
+
+      final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-');
+      print('Timestamp: $timestamp');
+
+      final mainFile = File('$exportDir/prompt_memo_backup_$timestamp.json');
+      print('Target file: ${mainFile.path}');
+
+      await mainFile.writeAsString(exportResult.jsonString);
+      print('File written successfully');
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('lastExportDate', DateTime.now().toString());
@@ -79,11 +122,21 @@ class _DataManagementScreenState extends ConsumerState<DataManagementScreen> {
         });
 
         _logger.info('Data export completed successfully');
+        _logger.info(
+          'Exported ${exportResult.exportedFilesCount} files out of ${exportResult.totalFilesCount} total files',
+        );
+        print('Export completed: ${exportResult.exportedFilesCount} files');
+
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Data exported successfully!'),
+            SnackBar(
+              content: Text(
+                'Data exported successfully!\n\n'
+                'Location: $exportDir\n'
+                'Files: ${exportResult.exportedFilesCount} files copied to attachments/',
+              ),
               backgroundColor: Colors.green,
+              duration: const Duration(seconds: 5),
             ),
           );
         }
@@ -131,7 +184,8 @@ class _DataManagementScreenState extends ConsumerState<DataManagementScreen> {
       final promptRepo = ref.read(promptRepositoryProvider);
       final collectionRepo = ref.read(collectionRepositoryProvider);
 
-      await _exportService.importFromJson(jsonData, promptRepo, collectionRepo);
+      final exportService = DataExportService();
+      await exportService.importFromJson(jsonData, promptRepo, collectionRepo);
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('lastImportDate', DateTime.now().toString());
@@ -601,7 +655,7 @@ class _DataManagementScreenState extends ConsumerState<DataManagementScreen> {
               FilledButton(
                 onPressed: () => Navigator.pop(context, true),
                 style: FilledButton.styleFrom(backgroundColor: Colors.red),
-                child: const Text('Delete All'),
+                child: Text('Delete All'),
               ),
             ],
           ),
@@ -619,7 +673,7 @@ class _DataManagementScreenState extends ConsumerState<DataManagementScreen> {
             const SnackBar(
               content: Text('All data deleted successfully. App will restart.'),
               backgroundColor: Colors.green,
-              duration: Duration(seconds: 3),
+              duration: const Duration(seconds: 3),
             ),
           );
         }

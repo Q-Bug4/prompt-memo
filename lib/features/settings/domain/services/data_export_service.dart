@@ -1,32 +1,37 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:prompt_memo/features/prompt-management/data/repositories/prompt_repository.dart';
 import 'package:prompt_memo/features/prompt-management/data/repositories/collection_repository.dart';
 import 'package:prompt_memo/shared/models/prompt.dart';
 import 'package:prompt_memo/shared/models/collection.dart';
 import 'package:prompt_memo/shared/models/result_sample.dart';
 import 'package:logging/logging.dart';
-import 'package:uuid/uuid.dart';
 
 class DataExportService {
   static final _logger = Logger('DataExportService');
 
-  Future<String> exportToJson(
+  static const String _attachmentsDirName = 'attachments';
+
+  Future<ExportResult> exportWithData(
     PromptRepository promptRepo,
     CollectionRepository collectionRepo,
   ) async {
     try {
-      _logger.info('Starting data export');
+      _logger.info('Starting data export with attachments');
 
       final prompts = await promptRepo.getAllPrompts();
       final collections = await collectionRepo.getAllCollections();
 
-      List<Map<String, dynamic>> promptSamples = [];
+      final allSampleFiles = <ResultSample>[];
+
       for (var prompt in prompts) {
         try {
           final samples = await promptRepo.getResultSamples(prompt.id);
           for (var sample in samples) {
-            promptSamples.add(sample.toJson());
+            allSampleFiles.add(sample);
           }
         } catch (e, s) {
           _logger.warning(
@@ -38,33 +43,120 @@ class DataExportService {
       }
 
       final exportData = {
-        'version': '1.0',
+        'version': '1.1.0',
         'exportedAt': DateTime.now().toIso8601String(),
         'prompts': prompts.map((p) => p.toJson()).toList(),
         'collections': collections.map((c) => c.toJson()).toList(),
-        'samples': promptSamples,
+        'samples': allSampleFiles.map((s) => s.toJson()).toList(),
       };
 
-      final jsonString = JsonEncoder.withIndent('  ').convert(exportData);
+      final jsonString = const JsonEncoder.withIndent('  ').convert(exportData);
       _logger.info('Data export completed successfully');
-      return jsonString;
+
+      return ExportResult(
+        jsonString: jsonString,
+        exportedFiles: allSampleFiles.map((s) => s.filePath).toList(),
+        totalFiles: allSampleFiles.length,
+      );
     } catch (e, s) {
       _logger.severe('Data export failed', e, s);
       rethrow;
     }
   }
 
-  Future<File> exportToFile(
+  Future<File> exportAllToDirectory(
     String directory,
     PromptRepository promptRepo,
     CollectionRepository collectionRepo,
   ) async {
-    final jsonData = await exportToJson(promptRepo, collectionRepo);
+    final exportResult = await exportWithData(promptRepo, collectionRepo);
+    final exportBasePath = await getExportDirectory();
     final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-');
-    final file = File('$directory/prompt_memo_backup_$timestamp.json');
-    await file.writeAsString(jsonData);
-    _logger.info('Exported data to ${file.path}');
-    return file;
+    final mainFile = File('$exportBasePath/prompt_memo_backup_$timestamp.json');
+
+    await mainFile.writeAsString(exportResult.jsonString);
+
+    final attachmentsDir = Directory(
+      p.join(exportBasePath, _attachmentsDirName),
+    );
+    if (!await attachmentsDir.exists()) {
+      await attachmentsDir.create(recursive: true);
+    }
+
+    int copiedFiles = 0;
+    int totalSize = 0;
+
+    for (var filePath in exportResult.exportedFiles) {
+      try {
+        final sourceFile = File(filePath);
+        if (await sourceFile.exists()) {
+          final fileName = p.basename(filePath);
+          final destFile = File(p.join(attachmentsDir.path, fileName));
+
+          await sourceFile.copy(destFile.path);
+          copiedFiles++;
+
+          final fileSize = await sourceFile.length();
+          totalSize += fileSize;
+
+          _logger.fine('Copied: $fileName');
+        }
+      } catch (e, s) {
+        _logger.warning('Failed to copy file: $filePath', e, s);
+      }
+    }
+
+    _logger.info(
+      'Export completed: $copiedFiles files, ${_formatBytes(totalSize)}',
+    );
+
+    return mainFile;
+  }
+
+  Future<String> getExportDirectory() async {
+    print('=== getExportDirectory called ===');
+
+    if (kIsWeb) {
+      throw UnsupportedError('Web platform not supported');
+    }
+
+    _logger.info(
+      'Getting export directory for platform: ${Platform.operatingSystem}',
+    );
+    print('Platform: ${Platform.operatingSystem}');
+
+    Directory? dir;
+
+    if (Platform.isAndroid) {
+      print('Android platform detected');
+      // Use public Downloads directory instead of app-specific directory
+      dir = Directory('/storage/emulated/0/Download');
+      _logger.info('Android public Downloads directory: ${dir.path}');
+      print('Downloads directory: ${dir.path}');
+      print('Using Downloads directory');
+    } else if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+      print('Desktop platform detected');
+      final supportDir = await getApplicationSupportDirectory();
+      _logger.info('Desktop Support directory: $supportDir');
+      print('Support directory: $supportDir');
+      dir = supportDir;
+    } else {
+      print('Other platform detected');
+      final docsDir = await getApplicationDocumentsDirectory();
+      _logger.info('Other platform Documents directory: $docsDir');
+      print('Documents directory: $docsDir');
+      dir = docsDir;
+    }
+
+    if (dir == null) {
+      _logger.severe('Failed to get export directory');
+      print('ERROR: dir is null!');
+      throw Exception('Failed to get export directory');
+    }
+
+    _logger.info('Final export directory: ${dir.path}');
+    print('Final export directory: ${dir.path}');
+    return dir.path;
   }
 
   Future<void> importFromJson(
@@ -73,7 +165,8 @@ class DataExportService {
     CollectionRepository collectionRepo,
   ) async {
     try {
-      _logger.info('Starting data import');
+      _logger.info('Starting data import with attachments');
+
       final data = jsonDecode(jsonData) as Map<String, dynamic>;
 
       if (!data.containsKey('version')) {
@@ -177,9 +270,9 @@ class DataExportService {
                 durationSeconds: sample.durationSeconds,
               );
               _logger.fine('Imported sample: ${sample.fileName}');
-            } else {
-              _logger.warning('Sample file not found: ${sample.filePath}');
             }
+          } else {
+            _logger.warning('Sample file not found: ${sample.filePath}');
           }
         } catch (e, s) {
           _logger.warning('Failed to import sample', e, s);
@@ -192,4 +285,25 @@ class DataExportService {
       rethrow;
     }
   }
+
+  String _formatBytes(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+  }
+}
+
+class ExportResult {
+  final String jsonString;
+  final List<String> exportedFiles;
+  final int totalFiles;
+
+  const ExportResult({
+    required this.jsonString,
+    required this.exportedFiles,
+    required this.totalFiles,
+  });
+
+  int get exportedFilesCount => exportedFiles.length;
+  int get totalFilesCount => totalFiles;
 }
