@@ -93,24 +93,14 @@ class _DataManagementScreenState extends ConsumerState<DataManagementScreen> {
       print('Creating DataExportService...');
       final exportService = DataExportService();
 
-      print('Calling exportWithData...');
-      final exportResult = await exportService.exportWithData(
+      print('Calling exportAllToDirectory...');
+      final zipFile = await exportService.exportAllToDirectory(
+        'export',
         promptRepo,
         collectionRepo,
       );
 
-      print('Getting export directory...');
-      final exportDir = await exportService.getExportDirectory();
-      print('Export directory: $exportDir');
-
-      final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-');
-      print('Timestamp: $timestamp');
-
-      final mainFile = File('$exportDir/prompt_memo_backup_$timestamp.json');
-      print('Target file: ${mainFile.path}');
-
-      await mainFile.writeAsString(exportResult.jsonString);
-      print('File written successfully');
+      print('Zip file created: ${zipFile.path}');
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('lastExportDate', DateTime.now().toString());
@@ -122,18 +112,14 @@ class _DataManagementScreenState extends ConsumerState<DataManagementScreen> {
         });
 
         _logger.info('Data export completed successfully');
-        _logger.info(
-          'Exported ${exportResult.exportedFilesCount} files out of ${exportResult.totalFilesCount} total files',
-        );
-        print('Export completed: ${exportResult.exportedFilesCount} files');
+        print('Export completed to: ${zipFile.path}');
 
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
                 'Data exported successfully!\n\n'
-                'Location: $exportDir\n'
-                'Files: ${exportResult.exportedFilesCount} files copied to attachments/',
+                'Location: ${zipFile.path}',
               ),
               backgroundColor: Colors.green,
               duration: const Duration(seconds: 5),
@@ -164,10 +150,12 @@ class _DataManagementScreenState extends ConsumerState<DataManagementScreen> {
     });
 
     try {
+      print('=== START IMPORT DATA ===');
       _logger.info('Starting data import');
+
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
-        allowedExtensions: ['json'],
+        allowedExtensions: ['zip'],
       );
 
       if (result == null || result.files.isEmpty) {
@@ -178,14 +166,22 @@ class _DataManagementScreenState extends ConsumerState<DataManagementScreen> {
         return;
       }
 
-      final file = File(result.files.first.path!);
-      final jsonData = await file.readAsString();
+      final zipFile = File(result.files.first.path!);
+      print('Selected zip file: ${zipFile.path}');
 
       final promptRepo = ref.read(promptRepositoryProvider);
       final collectionRepo = ref.read(collectionRepositoryProvider);
 
       final exportService = DataExportService();
-      await exportService.importFromJson(jsonData, promptRepo, collectionRepo);
+      final importResult = await exportService.importFromZip(
+        zipFile.path,
+        promptRepo,
+        collectionRepo,
+      );
+
+      print(
+        'Import completed: ${importResult.importedCollections} collections, ${importResult.importedPrompts} prompts, ${importResult.importedSamples} samples',
+      );
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('lastImportDate', DateTime.now().toString());
@@ -199,9 +195,15 @@ class _DataManagementScreenState extends ConsumerState<DataManagementScreen> {
         _logger.info('Data import completed successfully');
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Data imported successfully!'),
+            SnackBar(
+              content: Text(
+                'Data imported successfully!\n\n'
+                'Collections: ${importResult.importedCollections}\n'
+                'Prompts: ${importResult.importedPrompts}\n'
+                'Samples: ${importResult.importedSamples}',
+              ),
               backgroundColor: Colors.green,
+              duration: const Duration(seconds: 5),
             ),
           );
         }
@@ -350,7 +352,7 @@ class _DataManagementScreenState extends ConsumerState<DataManagementScreen> {
                         ),
                       ),
                       Text(
-                        'Export all prompts and collections to a JSON file',
+                        'Export all prompts and attachments to a ZIP file',
                         style: TextStyle(fontSize: 12, color: Colors.grey),
                       ),
                     ],
@@ -408,7 +410,7 @@ class _DataManagementScreenState extends ConsumerState<DataManagementScreen> {
                         ),
                       ),
                       Text(
-                        'Import prompts and collections from a JSON file',
+                        'Import prompts and attachments from a ZIP file',
                         style: TextStyle(fontSize: 12, color: Colors.grey),
                       ),
                     ],

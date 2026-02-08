@@ -1,5 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:archive/archive.dart';
+import 'package:archive/archive_io.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -12,8 +14,6 @@ import 'package:logging/logging.dart';
 
 class DataExportService {
   static final _logger = Logger('DataExportService');
-
-  static const String _attachmentsDirName = 'attachments';
 
   Future<ExportResult> exportWithData(
     PromptRepository promptRepo,
@@ -71,14 +71,22 @@ class DataExportService {
   ) async {
     final exportResult = await exportWithData(promptRepo, collectionRepo);
     final exportBasePath = await getExportDirectory();
-    final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-');
-    final mainFile = File('$exportBasePath/prompt_memo_backup_$timestamp.json');
+    final timestamp = DateTime.now()
+        .toIso8601String()
+        .replaceAll(':', '-')
+        .substring(0, 19);
+    final backupFolderName = 'prompt_memo_backup_$timestamp';
+    final backupDir = Directory('$exportBasePath/$backupFolderName');
 
-    await mainFile.writeAsString(exportResult.jsonString);
+    // Create backup folder
+    if (!await backupDir.exists()) {
+      await backupDir.create(recursive: true);
+    }
 
-    final attachmentsDir = Directory(
-      p.join(exportBasePath, _attachmentsDirName),
-    );
+    final jsonFile = File('${backupDir.path}/data.json');
+    await jsonFile.writeAsString(exportResult.jsonString);
+
+    final attachmentsDir = Directory('${backupDir.path}/attachments');
     if (!await attachmentsDir.exists()) {
       await attachmentsDir.create(recursive: true);
     }
@@ -91,7 +99,7 @@ class DataExportService {
         final sourceFile = File(filePath);
         if (await sourceFile.exists()) {
           final fileName = p.basename(filePath);
-          final destFile = File(p.join(attachmentsDir.path, fileName));
+          final destFile = File('${attachmentsDir.path}/$fileName');
 
           await sourceFile.copy(destFile.path);
           copiedFiles++;
@@ -110,7 +118,32 @@ class DataExportService {
       'Export completed: $copiedFiles files, ${_formatBytes(totalSize)}',
     );
 
-    return mainFile;
+    // Create zip file
+    final zipFile = File('$exportBasePath/${backupFolderName}.zip');
+    await createZip(backupDir, zipFile);
+
+    // Delete backup folder after zip is created
+    await backupDir.delete(recursive: true);
+
+    _logger.info('Zip created: ${zipFile.path}');
+
+    return zipFile;
+  }
+
+  Future<void> createZip(Directory sourceDir, File zipFile) async {
+    final archive = Archive();
+
+    await for (final entity in sourceDir.list(recursive: true)) {
+      if (entity is File) {
+        final relativePath = p.relative(entity.path, from: sourceDir.path);
+        final fileBytes = await entity.readAsBytes();
+        final file = ArchiveFile(relativePath, fileBytes.length, fileBytes);
+        archive.addFile(file);
+      }
+    }
+
+    final zipBytes = ZipEncoder().encode(archive);
+    await zipFile.writeAsBytes(zipBytes!);
   }
 
   Future<String> getExportDirectory() async {
@@ -159,11 +192,12 @@ class DataExportService {
     return dir.path;
   }
 
-  Future<void> importFromJson(
+  Future<ImportResult> importFromJson(
     String jsonData,
     PromptRepository promptRepo,
-    CollectionRepository collectionRepo,
-  ) async {
+    CollectionRepository collectionRepo, {
+    String? attachmentsBasePath,
+  }) async {
     try {
       _logger.info('Starting data import with attachments');
 
@@ -256,11 +290,36 @@ class DataExportService {
           final newPromptId = oldToNewPromptIds[sample.promptId];
 
           if (newPromptId != null) {
-            final file = File(sample.filePath);
+            // Try to copy file from attachments directory if provided
+            File? targetFile;
+
+            if (attachmentsBasePath != null) {
+              final attachmentsDir = Directory(
+                '$attachmentsBasePath/attachments',
+              );
+              final fileName = sample.filePath.split('/').last;
+              final sourceFile = File('${attachmentsDir.path}/$fileName');
+
+              if (await sourceFile.exists()) {
+                // Copy to app's results directory
+                final appSupportDir = await getApplicationSupportDirectory();
+                final resultsDir = Directory('${appSupportDir.path}/results');
+                if (!await resultsDir.exists()) {
+                  await resultsDir.create(recursive: true);
+                }
+
+                targetFile = File('${resultsDir.path}/$fileName');
+                await sourceFile.copy(targetFile.path);
+                _logger.fine('Copied sample file: $fileName');
+              }
+            }
+
+            // Use copied file or check if original file exists
+            final file = targetFile ?? File(sample.filePath);
             if (await file.exists()) {
               await promptRepo.createResultSample(
                 promptId: newPromptId,
-                filePath: sample.filePath,
+                filePath: file.path,
                 fileName: sample.fileName,
                 fileType: sample.fileType.name,
                 fileSize: sample.fileSize,
@@ -270,9 +329,9 @@ class DataExportService {
                 durationSeconds: sample.durationSeconds,
               );
               _logger.fine('Imported sample: ${sample.fileName}');
+            } else {
+              _logger.warning('Sample file not found: ${sample.filePath}');
             }
-          } else {
-            _logger.warning('Sample file not found: ${sample.filePath}');
           }
         } catch (e, s) {
           _logger.warning('Failed to import sample', e, s);
@@ -280,10 +339,78 @@ class DataExportService {
       }
 
       _logger.info('Data import completed successfully');
+
+      return ImportResult(
+        importedCollections: oldToNewCollectionIds.length,
+        importedPrompts: oldToNewPromptIds.length,
+        importedSamples: samplesData.length,
+      );
     } catch (e, s) {
       _logger.severe('Data import failed', e, s);
       rethrow;
     }
+  }
+
+  Future<ImportResult> importFromZip(
+    String zipPath,
+    PromptRepository promptRepo,
+    CollectionRepository collectionRepo,
+  ) async {
+    print('=== IMPORT FROM ZIP ===');
+    _logger.info('Importing from zip: $zipPath');
+
+    // Extract zip
+    final extractDir = await extractZip(zipPath);
+
+    // Find data.json file
+    final jsonFile = File('${extractDir.path}/data.json');
+    if (!await jsonFile.exists()) {
+      // Try alternative location
+      final altJsonFile = File(
+        '${extractDir.path}/prompt_memo_backup/data.json',
+      );
+      if (!await altJsonFile.exists()) {
+        throw Exception('Invalid backup file: data.json not found');
+      }
+    }
+
+    final jsonData = await jsonFile.readAsString();
+
+    // Import with attachments from extracted directory
+    final result = await importFromJson(
+      jsonData,
+      promptRepo,
+      collectionRepo,
+      attachmentsBasePath: extractDir.path,
+    );
+
+    // Cleanup
+    await extractDir.delete(recursive: true);
+
+    return result;
+  }
+
+  Future<Directory> extractZip(String zipPath) async {
+    final bytes = await File(zipPath).readAsBytes();
+    final archive = ZipDecoder().decodeBytes(bytes);
+
+    final tempDir = await getTemporaryDirectory();
+    final extractDir = Directory(
+      '${tempDir.path}/import_${DateTime.now().millisecondsSinceEpoch}',
+    );
+    await extractDir.create(recursive: true);
+
+    for (final file in archive) {
+      final filePath = '${extractDir.path}/${file.name}';
+      if (file.isFile) {
+        final outputFile = File(filePath);
+        await outputFile.create(recursive: true);
+        await outputFile.writeAsBytes(file.content as List<int>);
+      }
+    }
+
+    _logger.info('Extracted zip to: ${extractDir.path}');
+    return extractDir;
   }
 
   String _formatBytes(int bytes) {
@@ -306,4 +433,16 @@ class ExportResult {
 
   int get exportedFilesCount => exportedFiles.length;
   int get totalFilesCount => totalFiles;
+}
+
+class ImportResult {
+  final int importedCollections;
+  final int importedPrompts;
+  final int importedSamples;
+
+  const ImportResult({
+    required this.importedCollections,
+    required this.importedPrompts,
+    required this.importedSamples,
+  });
 }
