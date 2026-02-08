@@ -570,6 +570,9 @@ class _PromptListScreenState extends ConsumerState<PromptListScreen> {
   }
 
   Widget _buildCollectionCard(Collection collection) {
+    final samples = _getCollectionSamples(collection);
+    final sampleCount = samples.length;
+
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       color: Colors.blue.shade50,
@@ -625,6 +628,22 @@ class _PromptListScreenState extends ConsumerState<PromptListScreen> {
                             color: Colors.grey[600],
                           ),
                         ),
+                        if (sampleCount > 0) ...[
+                          const SizedBox(width: 8),
+                          Icon(
+                            Icons.attach_file,
+                            size: 14,
+                            color: Colors.grey[600],
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            '$sampleCount ${sampleCount == 1 ? 'sample' : 'samples'}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                        ],
                         const Spacer(),
                         Icon(Icons.access_time, size: 14, color: Colors.grey),
                         const SizedBox(width: 4),
@@ -637,6 +656,11 @@ class _PromptListScreenState extends ConsumerState<PromptListScreen> {
                         ),
                       ],
                     ),
+                    // Attachment thumbnails
+                    if (sampleCount > 0) ...[
+                      const SizedBox(height: 12),
+                      _buildAttachmentThumbnails(samples.take(3).toList()),
+                    ],
                   ],
                 ),
               ),
@@ -646,6 +670,19 @@ class _PromptListScreenState extends ConsumerState<PromptListScreen> {
         ),
       ),
     );
+  }
+
+  List<ResultSample> _getCollectionSamples(Collection collection) {
+    final promptsAsync = ref.read(promptsByCollectionProvider(collection.id));
+    final prompts = promptsAsync.valueOrNull ?? [];
+    final allSamples = <ResultSample>[];
+
+    for (final prompt in prompts) {
+      final samples = _promptSamples[prompt.id] ?? [];
+      allSamples.addAll(samples);
+    }
+
+    return allSamples;
   }
 
   String _formatDate(DateTime date) {
